@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { LogIn, UserPlus, Sparkles } from 'lucide-react';
+import { toast } from 'react-hot-toast'; // <--- IMPORT
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -16,13 +16,13 @@ function Login() {
     if (isSignUp) {
       const { error: signUpError } = await supabase.auth.signUp({ email, password });
       error = signUpError;
-      if (!error) alert("Account created! You can now log in.");
+      if (!error) toast.success("Account created! Logging you in... 🚀");
     } else {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       error = signInError;
     }
 
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     setLoading(false);
   };
 

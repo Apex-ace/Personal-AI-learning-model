@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Bot, User, Trash2 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { toast } from 'react-hot-toast'; // Notification Library
 
 function AITutor() {
   const [messages, setMessages] = useState([
@@ -42,9 +43,8 @@ function AITutor() {
   };
 
   const clearChat = () => {
-      if(window.confirm("Clear all messages?")) {
-          setMessages([{ role: 'assistant', content: "Chat cleared! What shall we learn next? 🌟" }]);
-      }
+      setMessages([{ role: 'assistant', content: "Chat cleared! What shall we learn next? 🌟" }]);
+      toast.success("Memory wiped! 🧹");
   };
 
   return (

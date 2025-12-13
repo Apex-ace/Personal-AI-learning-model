@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase'; 
 import { API_BASE_URL } from '../config'; 
+import { toast } from 'react-hot-toast'; // Notification Library
 import { 
     Calculator, BookOpen, PenTool, Clock, Calendar, 
-    Save, TrendingUp, AlertTriangle, CheckCircle 
+    Save, AlertTriangle, CheckCircle 
 } from 'lucide-react';
 
 // CHART COMPONENTS
@@ -62,10 +63,11 @@ function Prediction() {
                 }
             ]
         });
+        toast.success("Prediction complete!");
 
     } catch (err) { 
         console.error(err);
-        alert("Could not connect to Python Backend.");
+        toast.error("Could not connect to AI Brain. Is the backend running?");
     } 
     finally { setLoading(false); }
   };
@@ -81,9 +83,10 @@ function Prediction() {
             reading_score: formData["reading score"],
             total_predicted_marks: prediction.final_marks_prediction
         }]);
-        if (!error) alert("Data saved to database successfully.");
+        if (!error) toast.success("Mission Saved to History! 🌟");
+        else toast.error("Error saving data");
     } else {
-        alert("Please log in to save!");
+        toast.error("Please log in to save!");
     }
   };
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { supabase } from './supabase'; 
-import { LayoutDashboard, User, BookOpen, Sparkles, LineChart, LogOut } from 'lucide-react'; // Removed 'Menu'
+import { LayoutDashboard, User, BookOpen, Sparkles, LineChart, LogOut } from 'lucide-react';
+import { Toaster } from 'react-hot-toast'; // <--- IMPORT THIS
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import TestCorner from './pages/TestCorner';
@@ -34,13 +35,23 @@ function App() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
-  if (!session) return <Login />;
+  // IF NO USER, SHOW LOGIN SCREEN
+  if (!session) {
+    return (
+      <>
+        <Toaster position="top-center" reverseOrder={false} />
+        <Login />
+      </>
+    );
+  }
 
   return (
     <Router>
+      <Toaster position="top-center" reverseOrder={false} />
+      
       <div className="app-layout">
         
-        {/* --- MOBILE HEADER (Visible only on Mobile) --- */}
+        {/* MOBILE HEADER */}
         <header className="mobile-top-bar">
             <div className="logo-mobile">🦁 Junior Genius</div>
             <button className="logout-icon-mobile" onClick={handleLogout}>
@@ -48,7 +59,7 @@ function App() {
             </button>
         </header>
 
-        {/* --- NAVIGATION (Sidebar on Desktop / Bottom Bar on Mobile) --- */}
+        {/* NAVIGATION */}
         <nav className="sidebar">
           <div className="logo-desktop">🦁 Junior Genius</div>
           
@@ -65,7 +76,7 @@ function App() {
           </button>
         </nav>
         
-        {/* --- MAIN CONTENT --- */}
+        {/* MAIN CONTENT */}
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
