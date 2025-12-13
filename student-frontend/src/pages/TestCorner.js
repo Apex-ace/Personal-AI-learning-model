@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabase'; 
 import { API_BASE_URL } from '../config'; 
 import { toast } from 'react-hot-toast'; 
 import { 
     BookOpen, CheckCircle, XCircle, Calculator, PenTool, 
     Layers, ClipboardList, School, ArrowLeft, RefreshCw,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, Zap, TrendingDown
 } from 'lucide-react';
 
 function TestCorner() {
@@ -14,9 +15,11 @@ function TestCorner() {
   const [loading, setLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [activeSubject, setActiveSubject] = useState(null);
-  
-  // NEW: Track which question is currently visible
   const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // NEW STATE: Adaptive Test Recommendation
+  const [adaptiveRecommendation, setAdaptiveRecommendation] = useState(null);
+  const [predictionLoaded, setPredictionLoaded] = useState(false); // Manages loading state for prediction data
 
   // --- 1. EXAM HALL CONFIGURATION ---
   const subjects = [
@@ -58,23 +61,107 @@ function TestCorner() {
       },
   ];
 
-  const generateTest = async (subject) => {
+  // --- 2. ADAPTIVE LOGIC ---
+  const calculateAdaptiveTest = (prediction) => {
+      if (!prediction) return null;
+      
+      const { risk_level, math_score, reading_score, writing_score } = prediction;
+      
+      if (risk_level === 'Low') {
+          return {
+              subjectName: 'Internal 2',
+              test_type: 'Internal 2',
+              difficulty: 'Very Hard',
+              reason: 'Excellent performance! Let\'s tackle the toughest topics to maintain your lead.'
+          };
+      }
+      
+      const scores = {
+          'Math': math_score,
+          'Reading': reading_score,
+          'Writing': writing_score
+      };
+      
+      let weakestSubject = null;
+      let lowestScore = 100;
+
+      for (const [subject, score] of Object.entries(scores)) {
+          if (score < lowestScore) {
+              lowestScore = score;
+              weakestSubject = subject;
+          }
+      }
+
+      if (weakestSubject && lowestScore < 60) {
+          const difficulty = (risk_level === 'High' || lowestScore < 40) ? 'Easy' : 'Medium';
+          return {
+              subjectName: `${weakestSubject} Test`,
+              test_type: weakestSubject,
+              difficulty: difficulty,
+              reason: `Your lowest score (${lowestScore}%) is in ${weakestSubject}. Let's reinforce fundamentals in this area.`
+          };
+      }
+      
+      if (risk_level === 'Medium') {
+          return {
+              subjectName: 'Internal 1',
+              test_type: 'Internal 1',
+              difficulty: 'Hard',
+              reason: 'Good overall scores. Let\'s use the Internal 1 drill to boost exam readiness!'
+          };
+      }
+      
+      return null;
+  };
+
+  // --- 3. SUPABASE FETCH EFFECT ---
+  useEffect(() => {
+    const fetchPredictionHistory = async () => {
+        setPredictionLoaded(false);
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+            // Fetch the single most recent prediction entry saved by the user
+            const { data, error } = await supabase
+              .from('student_progress')
+              .select('risk_level, math_score, reading_score, writing_score')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(); //
+
+            if (error) {
+                console.error("Error fetching prediction history:", error);
+                toast.error("Could not load past performance data.");
+            } else if (data) {
+                // The data keys match the prediction object structure
+                setAdaptiveRecommendation(calculateAdaptiveTest(data));
+            }
+        }
+        setPredictionLoaded(true);
+    };
+
+    fetchPredictionHistory();
+  }, []); 
+
+  // --- 4. TEST GENERATION ---
+  const generateTest = async (subject, difficultyOverride = "Hard") => {
     setLoading(true);
     setQuestions([]);
     setScore(null);
     setAnswers({});
     setIsSubmitted(false);
     setActiveSubject(subject.name);
-    setCurrentIndex(0); // Reset to first question
+    setCurrentIndex(0); 
     
     const loadingToast = toast.loading(`Generating ${subject.name}...`);
-
+    
     try {
         const res = await fetch(`${API_BASE_URL}/generate_full_test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                difficulty: "Hard", 
+                difficulty: difficultyOverride, 
                 test_type: subject.test_type 
             })
         });
@@ -102,7 +189,7 @@ function TestCorner() {
         setLoading(false);
     }
   };
-
+  
   const submitTest = () => {
       // Validate all answered
       if (Object.keys(answers).length < questions.length) {
@@ -124,7 +211,7 @@ function TestCorner() {
       else toast("Keep practicing! 💪");
   };
 
-  // --- NAVIGATION HELPERS ---
+  // --- NAVIGATION AND STYLE HELPERS (Unchanged logic) ---
   const handleNext = () => {
       if (currentIndex < questions.length - 1) {
           setCurrentIndex(currentIndex + 1);
@@ -137,17 +224,15 @@ function TestCorner() {
       }
   };
 
-  // --- STYLE HELPERS ---
   const getButtonColor = (option) => {
       const currentQ = questions[currentIndex];
       const isSelected = answers[currentIndex] === option;
 
       if (!isSubmitted) return isSelected ? '#dbeafe' : 'white';
       
-      // REVIEW MODE COLORS
-      if (option === currentQ.correct_answer) return '#dcfce7'; // Correct (Green)
-      if (isSelected && option !== currentQ.correct_answer) return '#fee2e2'; // Wrong (Red)
-      return '#f1f5f9'; // Others (Grey)
+      if (option === currentQ.correct_answer) return '#dcfce7'; 
+      if (isSelected && option !== currentQ.correct_answer) return '#fee2e2'; 
+      return '#f1f5f9'; 
   };
 
   const getButtonBorder = (option) => {
@@ -156,13 +241,11 @@ function TestCorner() {
 
       if (!isSubmitted) return isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0';
       
-      // REVIEW MODE BORDERS
       if (option === currentQ.correct_answer) return '2px solid #22c55e'; 
       if (isSelected && option !== currentQ.correct_answer) return '2px solid #ef4444'; 
       return '1px solid #e2e8f0';
   };
 
-  // Current Question Object
   const currentQ = questions[currentIndex];
 
   return (
@@ -179,15 +262,68 @@ function TestCorner() {
             </div>
         )}
 
+        {/* --- LOADING PREDICTION DATA --- */}
+        {!predictionLoaded && !questions.length && (
+             <div style={{textAlign: 'center', marginTop: '50px', padding: '30px'}}>
+                <div className="loader" style={{marginBottom: '20px'}}></div>
+                <h2>Analyzing past performance...</h2>
+                <p style={{color: '#64748b'}}>Loading your recent AI assessment from history.</p>
+            </div>
+        )}
+
+        {/* --- ADAPTIVE TEST RECOMMENDATION --- */}
+        {predictionLoaded && !questions.length && !loading && adaptiveRecommendation && (
+            <div className="card" style={{
+                marginBottom: '30px', 
+                background: '#fffaeb', 
+                border: '2px dashed #fcd34d' 
+            }}>
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+                    <h3 style={{display:'flex', alignItems:'center', gap:'10px', marginTop:0, color:'#b45309'}}>
+                        <Zap size={24} color="#b45309"/> AI Recommended Mission
+                    </h3>
+                    <span style={{fontWeight: 'bold', color: '#f59e0b', fontSize: '0.9rem'}}>
+                        {adaptiveRecommendation.difficulty}
+                    </span>
+                </div>
+                
+                <p style={{color: '#78350f', marginBottom: '20px', fontSize: '1.1rem'}}>
+                    {adaptiveRecommendation.reason}
+                </p>
+
+                <button 
+                    onClick={() => generateTest(subjects.find(s => s.test_type === adaptiveRecommendation.test_type), adaptiveRecommendation.difficulty)} 
+                    className="btn-primary" 
+                    style={{
+                        background: '#f97316', 
+                        width: '100%', 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        gap: '10px'
+                    }}
+                >
+                    <TrendingDown size={20}/> Start {adaptiveRecommendation.subjectName} ({adaptiveRecommendation.difficulty})
+                </button>
+            </div>
+        )}
+        
         {/* --- EXAM HALL (Subject Selection) --- */}
-        {!questions.length && !loading && (
+        {predictionLoaded && !questions.length && !loading && (
             <div style={{
                 display: 'grid', 
                 gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
                 gap: '20px', padding: '10px'
             }}>
+                
+                {!adaptiveRecommendation && (
+                     <div style={{gridColumn: '1 / -1', textAlign: 'center', marginBottom: '10px', padding: '15px', background: '#e0f2fe', borderRadius: '10px', color: '#0369a1'}}>
+                         <p>💡 Run a **Stats & Predict** mission first to unlock personalized recommendations!</p>
+                     </div>
+                )}
+
                 {subjects.map((sub) => (
-                    <div key={sub.id} onClick={() => generateTest(sub)} style={{
+                    <div key={sub.id} onClick={() => generateTest(sub, "Hard")} style={{ 
                         background: sub.bg, border: `2px solid ${sub.border}`, borderBottom: `6px solid ${sub.border}`,
                         borderRadius: '16px', padding: '30px', cursor: 'pointer', transition: 'transform 0.2s',
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px',
@@ -195,13 +331,14 @@ function TestCorner() {
                     }}>
                         <div style={{color: sub.color}}>{sub.icon}</div>
                         <h3 style={{margin: 0, fontSize: '1.4rem', color: '#334155'}}>{sub.name}</h3>
-                        <span style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b'}}>Start Exam</span>
+                        <span style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b'}}>Start Exam (Hard)</span>
                     </div>
                 ))}
             </div>
         )}
 
-        {/* --- LOADING --- */}
+
+        {/* --- LOADING (Test Generation) --- */}
         {loading && (
             <div style={{textAlign: 'center', marginTop: '50px'}}>
                 <div className="loader" style={{marginBottom: '20px'}}></div>

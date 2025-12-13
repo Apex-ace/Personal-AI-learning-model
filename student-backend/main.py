@@ -120,16 +120,37 @@ class QuizSubmission(BaseModel):
 
 @app.post("/predict")
 def predict(student_data: StudentInput):
-    if ml_artifacts.get('error'): return {"final_marks_prediction": 0, "risk_level": "Error"}
+    if ml_artifacts.get('error'): return {"final_marks_prediction": 0, "risk_level": "Error", "math_score": 0, "reading_score": 0, "writing_score": 0}
     try:
         data = student_data.model_dump(by_alias=True)
+        
+        # --- SIMPLE PREDICTION LOGIC (Based on existing code) ---
         avg_score = (data['math score'] + data['reading score'] + data['writing score']) / 3
         pred_marks = round(avg_score * 0.9 + (data['Daily Study Hours'] * 2), 2)
         if pred_marks > 100: pred_marks = 100.0
+        
         pass_prob = 0.95 if pred_marks > 40 else 0.45
-        return {"final_marks_prediction": pred_marks, "final_pass_probability": pass_prob, "risk_level": "High" if pass_prob < 0.6 else "Low"}
+        risk_level = "High" if pass_prob < 0.6 else "Low"
+        # Adjusted risk_level logic for Medium Risk threshold (50-60 marks)
+        if risk_level == "Low" and pred_marks < 60 and pred_marks >= 40:
+             risk_level = "Medium" 
+        
+        # --- Extract Subject Scores for Adaptive Testing ---
+        subject_scores = {
+            "math_score": data['math score'],
+            "reading_score": data['reading score'],
+            "writing_score": data['writing score'],
+        }
+
+        return {
+            "final_marks_prediction": pred_marks, 
+            "final_pass_probability": pass_prob, 
+            "risk_level": risk_level,
+            **subject_scores # Inject subject scores into the response
+        }
     except Exception:
-        return {"final_marks_prediction": 0, "risk_level": "Unknown"}
+        # traceback.print_exc() # For debugging
+        return {"final_marks_prediction": 0, "risk_level": "Unknown", "math_score": 0, "reading_score": 0, "writing_score": 0}
 
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(request: ChatRequest):

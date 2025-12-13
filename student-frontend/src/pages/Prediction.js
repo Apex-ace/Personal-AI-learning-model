@@ -45,7 +45,7 @@ function Prediction() {
         
         const data = await res.json();
         setPrediction(data);
-
+        
         setChartData({
             labels: ['Passing', 'You', 'Topper'],
             datasets: [
@@ -75,14 +75,24 @@ function Prediction() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
+        // Saving full diagnostic data, assuming Supabase table 'student_progress' is updated
         const { error } = await supabase.from('student_progress').insert([{
             user_id: user.id,
-            math_score: formData["math score"],
-            reading_score: formData["reading score"],
+            // Diagnostic fields used by TestCorner.js for adaptive logic
+            math_score: prediction.math_score, 
+            reading_score: prediction.reading_score, 
+            writing_score: prediction.writing_score, 
+            risk_level: prediction.risk_level, 
+            pass_probability: prediction.final_pass_probability, 
+            // Original fields
             total_predicted_marks: prediction.final_marks_prediction
-        }]);
-        if (!error) toast.success("Saved to History! 🌟");
-        else toast.error("Error saving data");
+        }]).select(); //
+        
+        if (!error) toast.success("Saved to History! 検");
+        else {
+             console.error("Supabase Error:", error);
+             toast.error("Error saving data to history (Check DB schema)");
+        }
     } else {
         toast.error("Please log in to save!");
     }
@@ -100,7 +110,7 @@ function Prediction() {
         {/* FLEX CONTAINER: Stacks on mobile, Side-by-Side on Desktop */}
         <div style={{
             display: 'flex', 
-            flexWrap: 'wrap', // <--- THIS MAKES IT RESPONSIVE
+            flexWrap: 'wrap', 
             gap: '20px', 
             alignItems: 'flex-start',
             justifyContent: 'center'
@@ -108,18 +118,18 @@ function Prediction() {
             
             {/* --- CARD 1: INPUT FORM --- */}
             <div className="card" style={{
-                flex: '1 1 350px', // Min width 350px, otherwise takes full width
+                flex: '1 1 350px',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                 border: '1px solid #e2e8f0'
             }}>
                 <h3 style={{marginTop: 0, color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginBottom: '15px'}}>
-                    📝 Student Metrics
+                    統 Student Metrics
                 </h3>
                 
                 <form onSubmit={handleAnalyze}>
                     <div style={{
                         display: 'grid', 
-                        gridTemplateColumns: '1fr 1fr', // 2 columns for inputs
+                        gridTemplateColumns: '1fr 1fr',
                         gap: '15px'
                     }}>
                         {[
@@ -154,7 +164,7 @@ function Prediction() {
                         marginTop: '20px', width: '100%', padding: '12px', fontSize: '1rem',
                         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
                     }}>
-                        {loading ? "Calculating..." : "🔮 Predict Score"}
+                        {loading ? "Calculating..." : "醗 Predict Score"}
                     </button>
                 </form>
             </div>
@@ -167,7 +177,7 @@ function Prediction() {
                     animation: 'fadeIn 0.5s ease-in'
                 }}>
                     <h3 style={{marginTop: 0, color: '#334155', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '15px'}}>
-                        📊 AI Analysis
+                        投 AI Analysis
                     </h3>
                     
                     {/* RISK BADGE */}
