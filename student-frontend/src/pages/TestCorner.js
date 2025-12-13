@@ -19,7 +19,7 @@ function TestCorner() {
   
   // NEW STATE: Adaptive Test Recommendation
   const [adaptiveRecommendation, setAdaptiveRecommendation] = useState(null);
-  const [predictionLoaded, setPredictionLoaded] = useState(false); // Manages loading state for prediction data
+  const [predictionLoaded, setPredictionLoaded] = useState(false); 
 
   // --- 1. EXAM HALL CONFIGURATION ---
   const subjects = [
@@ -86,19 +86,22 @@ function TestCorner() {
       let lowestScore = 100;
 
       for (const [subject, score] of Object.entries(scores)) {
-          if (score < lowestScore) {
-              lowestScore = score;
+          // The scores from DB are numbers, but may need explicit conversion if stored as strings/decimals
+          const numericScore = parseFloat(score); 
+          if (numericScore < lowestScore) {
+              lowestScore = numericScore;
               weakestSubject = subject;
           }
       }
 
+      // Determine corrective action based on weakness
       if (weakestSubject && lowestScore < 60) {
           const difficulty = (risk_level === 'High' || lowestScore < 40) ? 'Easy' : 'Medium';
           return {
               subjectName: `${weakestSubject} Test`,
               test_type: weakestSubject,
               difficulty: difficulty,
-              reason: `Your lowest score (${lowestScore}%) is in ${weakestSubject}. Let's reinforce fundamentals in this area.`
+              reason: `Your lowest score (${Math.round(lowestScore)}%) is in ${weakestSubject}. Let's reinforce fundamentals in this area.`
           };
       }
       
@@ -121,20 +124,20 @@ function TestCorner() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (user) {
-            // Fetch the single most recent prediction entry saved by the user
+            // Fetch the single most recent prediction entry from the updated schema
             const { data, error } = await supabase
               .from('student_progress')
               .select('risk_level, math_score, reading_score, writing_score')
               .eq('user_id', user.id)
               .order('created_at', { ascending: false })
               .limit(1)
-              .maybeSingle(); //
+              .maybeSingle(); 
 
             if (error) {
                 console.error("Error fetching prediction history:", error);
                 toast.error("Could not load past performance data.");
             } else if (data) {
-                // The data keys match the prediction object structure
+                // Pass the fetched data directly to the adaptive calculation
                 setAdaptiveRecommendation(calculateAdaptiveTest(data));
             }
         }
@@ -191,7 +194,6 @@ function TestCorner() {
   };
   
   const submitTest = () => {
-      // Validate all answered
       if (Object.keys(answers).length < questions.length) {
           toast.error(`Please answer all questions first!`);
           return;
@@ -203,7 +205,7 @@ function TestCorner() {
       });
       setScore(newScore);
       setIsSubmitted(true);
-      setCurrentIndex(0); // Go back to start to review
+      setCurrentIndex(0); 
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
       
@@ -211,7 +213,6 @@ function TestCorner() {
       else toast("Keep practicing! 💪");
   };
 
-  // --- NAVIGATION AND STYLE HELPERS (Unchanged logic) ---
   const handleNext = () => {
       if (currentIndex < questions.length - 1) {
           setCurrentIndex(currentIndex + 1);

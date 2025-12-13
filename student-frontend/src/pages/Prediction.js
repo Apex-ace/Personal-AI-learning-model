@@ -1,3 +1,5 @@
+// Prediction.js
+
 import React, { useState } from 'react';
 import { supabase } from '../supabase'; 
 import { API_BASE_URL } from '../config'; 
@@ -75,23 +77,23 @@ function Prediction() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-        // Saving full diagnostic data, assuming Supabase table 'student_progress' is updated
+        // SAVING FULL DIAGNOSTIC DATA: Requires updated Supabase schema
         const { error } = await supabase.from('student_progress').insert([{
             user_id: user.id,
-            // Diagnostic fields used by TestCorner.js for adaptive logic
+            // These fields are necessary for TestCorner.js adaptive logic:
             math_score: prediction.math_score, 
             reading_score: prediction.reading_score, 
             writing_score: prediction.writing_score, 
             risk_level: prediction.risk_level, 
             pass_probability: prediction.final_pass_probability, 
-            // Original fields
+            // Original fields:
             total_predicted_marks: prediction.final_marks_prediction
-        }]).select(); //
+        }]).select(); 
         
-        if (!error) toast.success("Saved to History! 検");
+        if (!error) toast.success("Saved to History! Go to Exam Hall for a new mission.");
         else {
              console.error("Supabase Error:", error);
-             toast.error("Error saving data to history (Check DB schema)");
+             toast.error("Error saving data. Check your Supabase schema!");
         }
     } else {
         toast.error("Please log in to save!");
