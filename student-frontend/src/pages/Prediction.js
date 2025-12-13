@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase'; 
 import { API_BASE_URL } from '../config'; 
-import { toast } from 'react-hot-toast'; // Notification Library
+import { toast } from 'react-hot-toast'; 
 import { 
-    Calculator, BookOpen, PenTool, Clock, Calendar, 
-    Save, AlertTriangle, CheckCircle 
+    Save, AlertTriangle, CheckCircle, TrendingUp 
 } from 'lucide-react';
 
 // CHART COMPONENTS
@@ -47,17 +46,16 @@ function Prediction() {
         const data = await res.json();
         setPrediction(data);
 
-        // --- PREPARE ML VISUALIZATION ---
         setChartData({
-            labels: ['Passing Marks', 'Your Prediction', 'Topper Score'],
+            labels: ['Passing', 'You', 'Topper'],
             datasets: [
                 {
-                    label: 'Score Comparison',
-                    data: [40, data.final_marks_prediction, 95], // 40 is pass, 95 is max
+                    label: 'Marks',
+                    data: [40, data.final_marks_prediction, 95],
                     backgroundColor: [
-                        '#94a3b8', // Grey for Pass
-                        data.final_marks_prediction < 40 ? '#ef4444' : '#3b82f6', // Red if fail, Blue if pass
-                        '#e2e8f0'  // Light grey for max
+                        '#cbd5e1', 
+                        data.final_marks_prediction < 40 ? '#ef4444' : '#3b82f6', 
+                        '#e2e8f0'
                     ],
                     borderRadius: 8,
                 }
@@ -67,7 +65,7 @@ function Prediction() {
 
     } catch (err) { 
         console.error(err);
-        toast.error("Could not connect to AI Brain. Is the backend running?");
+        toast.error("Could not connect to AI Brain.");
     } 
     finally { setLoading(false); }
   };
@@ -83,7 +81,7 @@ function Prediction() {
             reading_score: formData["reading score"],
             total_predicted_marks: prediction.final_marks_prediction
         }]);
-        if (!error) toast.success("Mission Saved to History! 🌟");
+        if (!error) toast.success("Saved to History! 🌟");
         else toast.error("Error saving data");
     } else {
         toast.error("Please log in to save!");
@@ -91,40 +89,86 @@ function Prediction() {
   };
 
   return (
-    <div className="page-container">
-        <header style={{textAlign: 'center', marginBottom: '30px'}}>
-            <h1 style={{fontSize: '2.2rem', marginBottom: '5px'}}>📊 ML Model Prediction</h1>
-            <p style={{color: '#64748b'}}>Direct feed from Linear Regression & Random Forest Model</p>
+    <div className="page-container" style={{maxWidth: '1200px', margin: '0 auto'}}>
+        <header style={{textAlign: 'center', marginBottom: '20px'}}>
+            <h1 style={{fontSize: '1.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#1e293b'}}>
+                <TrendingUp size={28} color="#3b82f6"/> Stats & Predict
+            </h1>
+            <p style={{color: '#64748b', fontSize: '0.9rem'}}>AI Performance Calculator</p>
         </header>
 
-        <div style={{display: 'grid', gridTemplateColumns: prediction ? '1fr 1fr' : '1fr', gap: '30px'}}>
+        {/* FLEX CONTAINER: Stacks on mobile, Side-by-Side on Desktop */}
+        <div style={{
+            display: 'flex', 
+            flexWrap: 'wrap', // <--- THIS MAKES IT RESPONSIVE
+            gap: '20px', 
+            alignItems: 'flex-start',
+            justifyContent: 'center'
+        }}>
             
-            {/* --- INPUT FORM --- */}
-            <div className="card">
+            {/* --- CARD 1: INPUT FORM --- */}
+            <div className="card" style={{
+                flex: '1 1 350px', // Min width 350px, otherwise takes full width
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                border: '1px solid #e2e8f0'
+            }}>
+                <h3 style={{marginTop: 0, color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginBottom: '15px'}}>
+                    📝 Student Metrics
+                </h3>
+                
                 <form onSubmit={handleAnalyze}>
-                    <h3 style={{marginTop: 0, color: '#334155'}}>1. Student Metrics</h3>
-                    
-                    <div className="stats-grid" style={{gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom:'20px'}}>
-                        <div><label style={{fontSize:'0.85rem'}}>Math Score</label><input name="math score" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Reading Score</label><input name="reading score" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Writing Score</label><input name="writing score" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Study Hours</label><input name="Daily Study Hours" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Attendance %</label><input name="Attendance (%)" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Assignment (10)</label><input name="Assignment Score (out of 10)" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Internal 1 (40)</label><input name="Internal Test 1 (out of 40)" type="number" onChange={handleChange}/></div>
-                        <div><label style={{fontSize:'0.85rem'}}>Internal 2 (40)</label><input name="Internal Test 2 (out of 40)" type="number" onChange={handleChange}/></div>
+                    <div style={{
+                        display: 'grid', 
+                        gridTemplateColumns: '1fr 1fr', // 2 columns for inputs
+                        gap: '15px'
+                    }}>
+                        {[
+                            { label: "Math", name: "math score" },
+                            { label: "Reading", name: "reading score" },
+                            { label: "Writing", name: "writing score" },
+                            { label: "Hours/Day", name: "Daily Study Hours" },
+                            { label: "Attendance %", name: "Attendance (%)" },
+                            { label: "Assign. (10)", name: "Assignment Score (out of 10)" },
+                            { label: "Internal 1 (40)", name: "Internal Test 1 (out of 40)" },
+                            { label: "Internal 2 (40)", name: "Internal Test 2 (out of 40)" }
+                        ].map((field) => (
+                            <div key={field.name}>
+                                <label style={{fontSize:'0.8rem', fontWeight: '600', color: '#64748b', display: 'block', marginBottom: '4px'}}>
+                                    {field.label}
+                                </label>
+                                <input 
+                                    name={field.name} 
+                                    type="number" 
+                                    onChange={handleChange}
+                                    style={{
+                                        width: '100%', padding: '10px', borderRadius: '8px', 
+                                        border: '1px solid #cbd5e1', fontSize: '1rem',
+                                        backgroundColor: '#f8fafc'
+                                    }}
+                                />
+                            </div>
+                        ))}
                     </div>
 
-                    <button className="btn-primary" disabled={loading}>
-                        {loading ? "Processing Data..." : "Run Prediction Model"}
+                    <button className="btn-primary" disabled={loading} style={{
+                        marginTop: '20px', width: '100%', padding: '12px', fontSize: '1rem',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+                    }}>
+                        {loading ? "Calculating..." : "🔮 Predict Score"}
                     </button>
                 </form>
             </div>
 
-            {/* --- ML OUTPUT RESULTS --- */}
+            {/* --- CARD 2: RESULTS (Only shows when prediction exists) --- */}
             {prediction && chartData && (
-                <div className="card" style={{background: '#f8fafc', border: '1px solid #cbd5e1'}}>
-                    <h3 style={{marginTop: 0, color: '#334155'}}>2. Model Output</h3>
+                <div className="card" style={{
+                    flex: '1 1 350px',
+                    background: '#f8fafc', border: '2px solid #3b82f6',
+                    animation: 'fadeIn 0.5s ease-in'
+                }}>
+                    <h3 style={{marginTop: 0, color: '#334155', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '15px'}}>
+                        📊 AI Analysis
+                    </h3>
                     
                     {/* RISK BADGE */}
                     <div style={{
@@ -136,25 +180,25 @@ function Prediction() {
                     }}>
                         {prediction.risk_level === 'High' ? <AlertTriangle size={24}/> : <CheckCircle size={24}/>}
                         <div>
-                            <strong style={{fontSize:'1.1rem', display:'block'}}>Risk Level: {prediction.risk_level}</strong>
-                            <span style={{fontSize:'0.9rem'}}>Based on study hours & internal scores.</span>
+                            <strong style={{fontSize:'1.1rem', display:'block'}}>Risk: {prediction.risk_level}</strong>
+                            <span style={{fontSize:'0.85rem'}}>Based on study habits.</span>
                         </div>
                     </div>
 
-                    {/* NUMERICAL STATS */}
-                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px'}}>
-                        <div style={{background:'white', padding:'15px', borderRadius:'10px', border:'1px solid #e2e8f0', textAlign:'center'}}>
-                            <div style={{color:'#64748b', fontSize:'0.9rem', marginBottom:'5px'}}>Predicted Marks</div>
-                            <div style={{fontSize:'2.5rem', fontWeight:'bold', color:'#3b82f6'}}>{prediction.final_marks_prediction}</div>
+                    {/* BIG STATS */}
+                    <div style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
+                        <div style={{flex: 1, background:'white', padding:'15px', borderRadius:'10px', border:'1px solid #e2e8f0', textAlign:'center'}}>
+                            <div style={{color:'#64748b', fontSize:'0.8rem'}}>Marks</div>
+                            <div style={{fontSize:'2rem', fontWeight:'bold', color:'#3b82f6'}}>{prediction.final_marks_prediction}</div>
                         </div>
-                        <div style={{background:'white', padding:'15px', borderRadius:'10px', border:'1px solid #e2e8f0', textAlign:'center'}}>
-                            <div style={{color:'#64748b', fontSize:'0.9rem', marginBottom:'5px'}}>Pass Probability</div>
-                            <div style={{fontSize:'2.5rem', fontWeight:'bold', color:'#8b5cf6'}}>{(prediction.final_pass_probability * 100).toFixed(0)}%</div>
+                        <div style={{flex: 1, background:'white', padding:'15px', borderRadius:'10px', border:'1px solid #e2e8f0', textAlign:'center'}}>
+                            <div style={{color:'#64748b', fontSize:'0.8rem'}}>Chance</div>
+                            <div style={{fontSize:'2rem', fontWeight:'bold', color:'#8b5cf6'}}>{(prediction.final_pass_probability * 100).toFixed(0)}%</div>
                         </div>
                     </div>
 
-                    {/* GRAPH */}
-                    <div style={{height: '200px', width: '100%'}}>
+                    {/* CHART */}
+                    <div style={{height: '200px', width: '100%', marginBottom: '15px'}}>
                         <Bar 
                             data={chartData} 
                             options={{
@@ -166,8 +210,8 @@ function Prediction() {
                         />
                     </div>
 
-                    <button onClick={saveProgress} className="btn-primary" style={{marginTop: '20px', background: '#334155'}}>
-                        <Save size={18} style={{marginRight:'8px'}}/> Save to Database
+                    <button onClick={saveProgress} className="btn-primary" style={{width: '100%', background: '#334155'}}>
+                        <Save size={18} style={{marginRight:'8px'}}/> Save Result
                     </button>
                 </div>
             )}
