@@ -15,14 +15,14 @@ function TestCorner() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [activeSubject, setActiveSubject] = useState(null);
 
-  // --- 1. EXAM CONFIGURATION (Exact Questions & Marks) ---
+  // --- 1. EXAM CONFIGURATION (Optimized for Speed) ---
   const subjects = [
       { 
           id: 'math', 
           name: 'Math Score', 
           maxMarks: 100, 
-          questionsNeeded: 20, // 20 * 5 = 100
-          marksPerQuestion: 5,
+          questionsNeeded: 10, // Reduced to 10 for speed
+          marksPerQuestion: 10, // 10 x 10 = 100
           topic: 'Grade 5 Mathematics', 
           icon: <Calculator size={28}/>, color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' 
       },
@@ -30,8 +30,8 @@ function TestCorner() {
           id: 'reading', 
           name: 'Reading Score', 
           maxMarks: 100, 
-          questionsNeeded: 20, 
-          marksPerQuestion: 5,
+          questionsNeeded: 10, 
+          marksPerQuestion: 10, // 10 x 10 = 100 
           topic: 'Reading Comprehension', 
           icon: <BookOpen size={28}/>, color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8' 
       },
@@ -39,8 +39,8 @@ function TestCorner() {
           id: 'writing', 
           name: 'Writing Score', 
           maxMarks: 100, 
-          questionsNeeded: 20, 
-          marksPerQuestion: 5,
+          questionsNeeded: 10, 
+          marksPerQuestion: 10, // 10 x 10 = 100
           topic: 'English Grammar', 
           icon: <PenTool size={28}/>, color: '#eab308', bg: '#fefce8', border: '#fde047' 
       },
@@ -48,8 +48,8 @@ function TestCorner() {
           id: 'internal1', 
           name: 'Internal Test 1', 
           maxMarks: 40, 
-          questionsNeeded: 20, // 20 * 2 = 40
-          marksPerQuestion: 2,
+          questionsNeeded: 10, 
+          marksPerQuestion: 4, // 10 x 4 = 40
           topic: 'General Science', 
           icon: <Layers size={28}/>, color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe' 
       },
@@ -57,8 +57,8 @@ function TestCorner() {
           id: 'internal2', 
           name: 'Internal Test 2', 
           maxMarks: 40, 
-          questionsNeeded: 20, 
-          marksPerQuestion: 2,
+          questionsNeeded: 10, 
+          marksPerQuestion: 4, // 10 x 4 = 40
           topic: 'Social Studies', 
           icon: <Layers size={28}/>, color: '#a855f7', bg: '#faf5ff', border: '#e9d5ff' 
       },
@@ -66,7 +66,7 @@ function TestCorner() {
           id: 'assignment', 
           name: 'Assignment', 
           maxMarks: 10, 
-          questionsNeeded: 10, // 10 * 1 = 10
+          questionsNeeded: 10, // 10 x 1 = 10
           marksPerQuestion: 1,
           topic: 'Logical Reasoning', 
           icon: <ClipboardList size={28}/>, color: '#22c55e', bg: '#f0fdf4', border: '#bbf7d0' 
@@ -82,11 +82,10 @@ function TestCorner() {
     setIsSubmitted(false);
     setActiveSubject(subject);
     
-    // Warn user that 20 questions takes time
-    const waitTime = subject.questionsNeeded > 10 ? "45-60s" : "30s";
-    const loadingToast = toast.loading(`Generating ${subject.questionsNeeded} Questions... (Wait ${waitTime})`);
+    const loadingToast = toast.loading(`Generating Exam...`);
 
     try {
+        // Asking for exactly 10 questions is much safer for the server
         const promptTopic = `${subject.topic}. Generate exactly ${subject.questionsNeeded} distinct questions.`;
 
         const res = await fetch(`${API_BASE_URL}/generate_test`, {
@@ -107,7 +106,7 @@ function TestCorner() {
         
         setQuestions(parsedQuestions);
         toast.dismiss(loadingToast);
-        toast.success(`Generated ${parsedQuestions.length} Questions! 🍀`);
+        toast.success(`Exam Ready! 🍀`);
 
     } catch (err) {
         console.error(err);
@@ -131,6 +130,7 @@ function TestCorner() {
       });
       setCorrectCount(rawCorrect);
 
+      // Score Calculation
       const finalScore = rawCorrect * activeSubject.marksPerQuestion;
       
       setScore(finalScore);
@@ -145,7 +145,6 @@ function TestCorner() {
       }
   };
 
-  // --- REVIEW COLORS ---
   const getButtonColor = (qIndex, option) => {
       if (!isSubmitted) return answers[qIndex] === option ? '#dbeafe' : 'white';
       const correctAnswer = questions[qIndex].answer;
@@ -165,7 +164,6 @@ function TestCorner() {
   };
 
   return (
-    // CONTAINER: Padding added for mobile safety
     <div className="page-container" style={{maxWidth: '1000px', margin: '0 auto', padding: '20px', paddingBottom: '80px'}}>
         
         {/* --- HEADER --- */}
@@ -180,11 +178,10 @@ function TestCorner() {
             </div>
         )}
 
-        {/* --- EXAM HALL DASHBOARD (RESPONSIVE GRID) --- */}
+        {/* --- EXAM HALL DASHBOARD --- */}
         {!questions.length && !loading && (
             <div style={{
                 display: 'grid', 
-                // GRID MAGIC: Fits 1 column on phone, 2 on tablet, 3 on desktop
                 gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
                 gap: '15px'
             }}>
@@ -234,8 +231,7 @@ function TestCorner() {
             <div style={{textAlign: 'center', marginTop: '60px'}}>
                 <div className="loader" style={{marginBottom: '20px'}}></div>
                 <h2>Generating Paper...</h2>
-                <p style={{color: '#64748b', fontSize: '0.9rem'}}>Creating {activeSubject?.questionsNeeded} unique questions.</p>
-                <p style={{color: '#94a3b8', fontSize:'0.8rem', marginTop: '10px'}}>Please keep app open.</p>
+                <p style={{color: '#64748b', fontSize: '0.9rem'}}>Creating questions for {activeSubject?.name}</p>
             </div>
         )}
 
