@@ -79,8 +79,13 @@ async def lifespan(app: FastAPI):
     ml_artifacts.clear()
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Change "*" to your specific Vercel URL for better security later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # --- 2. Data Models ---
 class StudentInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
