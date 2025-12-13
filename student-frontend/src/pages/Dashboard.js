@@ -2,29 +2,45 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-import { Trophy, TrendingUp, Zap } from 'lucide-react'; // Import Icons
+import { Trophy, TrendingUp, Zap } from 'lucide-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 function Dashboard() {
   const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      const { data } = await supabase.from('student_progress').select('*').order('created_at', { ascending: true });
-      if (data) setHistory(data);
-    };
     fetchHistory();
   }, []);
+
+  const fetchHistory = async () => {
+    setLoading(true);
+    
+    // 1. Get the Current User
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+        // 2. Fetch data ONLY for this user
+        const { data } = await supabase
+          .from('student_progress')
+          .select('*')
+          .eq('user_id', user.id) // <--- THIS FILTERS BY YOUR ID
+          .order('created_at', { ascending: true });
+        
+        if (data) setHistory(data);
+    }
+    setLoading(false);
+  };
 
   const data = {
     labels: history.map(item => new Date(item.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric'})),
     datasets: [{
       label: 'My XP Points 🚀',
       data: history.map(item => item.total_predicted_marks),
-      borderColor: '#8b5cf6', // Purple line
+      borderColor: '#8b5cf6',
       backgroundColor: 'rgba(139, 92, 246, 0.2)',
-      tension: 0.4, // Curvy lines are friendlier
+      tension: 0.4,
       pointRadius: 6,
       pointHoverRadius: 8,
       fill: true
@@ -40,6 +56,12 @@ function Dashboard() {
         y: { grid: { borderDash: [5, 5] }, beginAtZero: true, max: 100 }
     }
   };
+
+  if (loading) return (
+    <div className="page-container" style={{textAlign:'center', paddingTop:'50px'}}>
+        <h2>Loading Mission Control... 🛸</h2>
+    </div>
+  );
 
   return (
     <div className="page-container">
@@ -73,7 +95,7 @@ function Dashboard() {
             {history.length > 0 ? <Line data={data} options={chartOptions}/> : 
             <div style={{textAlign:'center', padding:'50px', color:'#94a3b8'}}>
                 <p>No missions completed yet!</p>
-                <p>Go to <strong>Performance</strong> to start your first mission.</p>
+                <p>Go to <strong>Check Stats</strong> to start your first mission.</p>
             </div>}
         </div>
       </div>

@@ -1,27 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { supabase } from './supabase'; // Import Supabase
-import { LayoutDashboard, User, BookOpen, Sparkles, LineChart, LogOut } from 'lucide-react';
+import { supabase } from './supabase'; 
+import { LayoutDashboard, User, BookOpen, Sparkles, LineChart, LogOut } from 'lucide-react'; // Removed 'Menu'
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import TestCorner from './pages/TestCorner';
 import Prediction from './pages/Prediction';
 import AITutor from './pages/AITutor';
-import Login from './pages/Login'; 
+import Login from './pages/Login';
 import './App.css';
-
-// Inside src/App.js
 
 function NavItem({ to, icon, label }) {
     const location = useLocation();
     const isActive = location.pathname === to;
-    
     return (
         <li>
             <Link to={to} className={isActive ? "active" : ""}>
-                {icon}
-                {/* On mobile, we might want to hide the label if screen is TINY, 
-                    but the CSS handles font-size perfectly. */}
+                <div className="nav-icon">{icon}</div>
                 <span className="nav-label">{label}</span>
             </Link>
         </li>
@@ -32,51 +27,45 @@ function App() {
   const [session, setSession] = useState(null);
 
   useEffect(() => {
-    // 1. Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    // 2. Listen for changes (login/logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
+  const handleLogout = async () => { await supabase.auth.signOut(); };
 
-  // IF NO USER, SHOW LOGIN SCREEN
-  if (!session) {
-    return <Login />;
-  }
+  if (!session) return <Login />;
 
-  // IF USER LOGGED IN, SHOW APP
   return (
     <Router>
       <div className="app-layout">
+        
+        {/* --- MOBILE HEADER (Visible only on Mobile) --- */}
+        <header className="mobile-top-bar">
+            <div className="logo-mobile">🦁 Junior Genius</div>
+            <button className="logout-icon-mobile" onClick={handleLogout}>
+                <LogOut size={20} color="#ef4444"/>
+            </button>
+        </header>
+
+        {/* --- NAVIGATION (Sidebar on Desktop / Bottom Bar on Mobile) --- */}
         <nav className="sidebar">
-          <div className="logo">🦁 Junior Genius</div>
+          <div className="logo-desktop">🦁 Junior Genius</div>
+          
           <ul className="nav-links">
-            <NavItem to="/" icon={<LayoutDashboard size={24}/>} label="Mission Control" />
-            <NavItem to="/profile" icon={<User size={24}/>} label="My Passport" />
-            <NavItem to="/predict" icon={<LineChart size={24}/>} label="Check Stats" />
-            <NavItem to="/test-corner" icon={<BookOpen size={24}/>} label="Test Corner" />
-            <NavItem to="/ai-tutor" icon={<Sparkles size={24}/>} label="AI Buddy" />
+            <NavItem to="/" icon={<LayoutDashboard size={24}/>} label="Home" />
+            <NavItem to="/profile" icon={<User size={24}/>} label="Profile" />
+            <NavItem to="/predict" icon={<LineChart size={24}/>} label="Stats" />
+            <NavItem to="/test-corner" icon={<BookOpen size={24}/>} label="Tests" />
+            <NavItem to="/ai-tutor" icon={<Sparkles size={24}/>} label="AI" />
           </ul>
           
-          <button onClick={handleLogout} style={{
-              marginTop: 'auto', background: '#fee2e2', color: '#ef4444', 
-              border: 'none', padding: '10px', borderRadius: '15px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold'
-          }}>
-            <LogOut size={20}/> Log Out
+          <button className="logout-btn-desktop" onClick={handleLogout}>
+            <LogOut size={20}/> <span className="nav-label">Log Out</span>
           </button>
         </nav>
         
+        {/* --- MAIN CONTENT --- */}
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -89,22 +78,6 @@ function App() {
       </div>
     </Router>
   );
-}// Inside src/App.js
-
-function NavItem({ to, icon, label }) {
-    const location = useLocation();
-    const isActive = location.pathname === to;
-    
-    return (
-        <li>
-            <Link to={to} className={isActive ? "active" : ""}>
-                {icon}
-                {/* On mobile, we might want to hide the label if screen is TINY, 
-                    but the CSS handles font-size perfectly. */}
-                <span className="nav-label">{label}</span>
-            </Link>
-        </li>
-    );
 }
 
 export default App;
