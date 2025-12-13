@@ -15,14 +15,14 @@ function TestCorner() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [activeSubject, setActiveSubject] = useState(null);
 
-  // --- 1. EXAM CONFIGURATION (Optimized for Speed) ---
+  // --- 1. EXAM CONFIGURATION ---
   const subjects = [
       { 
           id: 'math', 
           name: 'Math Score', 
           maxMarks: 100, 
-          questionsNeeded: 10, // Reduced to 10 for speed
-          marksPerQuestion: 10, // 10 x 10 = 100
+          questionsNeeded: 10, 
+          marksPerQuestion: 10, 
           topic: 'Grade 5 Mathematics', 
           icon: <Calculator size={28}/>, color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' 
       },
@@ -31,7 +31,7 @@ function TestCorner() {
           name: 'Reading Score', 
           maxMarks: 100, 
           questionsNeeded: 10, 
-          marksPerQuestion: 10, // 10 x 10 = 100 
+          marksPerQuestion: 10, 
           topic: 'Reading Comprehension', 
           icon: <BookOpen size={28}/>, color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8' 
       },
@@ -40,7 +40,7 @@ function TestCorner() {
           name: 'Writing Score', 
           maxMarks: 100, 
           questionsNeeded: 10, 
-          marksPerQuestion: 10, // 10 x 10 = 100
+          marksPerQuestion: 10, 
           topic: 'English Grammar', 
           icon: <PenTool size={28}/>, color: '#eab308', bg: '#fefce8', border: '#fde047' 
       },
@@ -49,7 +49,7 @@ function TestCorner() {
           name: 'Internal Test 1', 
           maxMarks: 40, 
           questionsNeeded: 10, 
-          marksPerQuestion: 4, // 10 x 4 = 40
+          marksPerQuestion: 4, 
           topic: 'General Science', 
           icon: <Layers size={28}/>, color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe' 
       },
@@ -58,7 +58,7 @@ function TestCorner() {
           name: 'Internal Test 2', 
           maxMarks: 40, 
           questionsNeeded: 10, 
-          marksPerQuestion: 4, // 10 x 4 = 40
+          marksPerQuestion: 4, 
           topic: 'Social Studies', 
           icon: <Layers size={28}/>, color: '#a855f7', bg: '#faf5ff', border: '#e9d5ff' 
       },
@@ -66,8 +66,8 @@ function TestCorner() {
           id: 'assignment', 
           name: 'Assignment', 
           maxMarks: 10, 
-          questionsNeeded: 10, // 10 x 1 = 10
-          marksPerQuestion: 1,
+          questionsNeeded: 10, 
+          marksPerQuestion: 1, 
           topic: 'Logical Reasoning', 
           icon: <ClipboardList size={28}/>, color: '#22c55e', bg: '#f0fdf4', border: '#bbf7d0' 
       },
@@ -85,25 +85,24 @@ function TestCorner() {
     const loadingToast = toast.loading(`Generating Exam...`);
 
     try {
-        // Asking for exactly 10 questions is much safer for the server
-        const promptTopic = `${subject.topic}. Generate exactly ${subject.questionsNeeded} distinct questions.`;
+        // 1. We ask for the question count inside the TOPIC string
+        const promptTopic = `${subject.topic}. IMPORTANT: Return exactly ${subject.questionsNeeded} distinct questions in JSON format.`;
 
-        // ✅ FIXED: Changed from /generate_test to /generate_full_test
+        // 2. We send ONLY topic and grade_level (Removing num_questions prevents the 422 Error)
         const res = await fetch(`${API_BASE_URL}/generate_full_test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 topic: promptTopic, 
-                grade_level: "5",
-                num_questions: subject.questionsNeeded 
+                grade_level: "5"
+                // REMOVED: num_questions (This was causing the error)
             })
         });
         
-        if (!res.ok) throw new Error("Server sleeping or Not Found");
+        if (!res.ok) throw new Error("Server error or format rejected");
 
         const data = await res.json();
         
-        // Handle different response formats safely
         let parsedQuestions = [];
         if (data.test_json) {
              let cleanJson = data.test_json.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -114,6 +113,7 @@ function TestCorner() {
              parsedQuestions = data.questions || [];
         }
         
+        // Safety: If AI ignored the count, slice or duplicate? (Usually AI obeys the prompt)
         setQuestions(parsedQuestions);
         toast.dismiss(loadingToast);
         toast.success(`Exam Ready! 🍀`);
@@ -121,7 +121,7 @@ function TestCorner() {
     } catch (err) {
         console.error(err);
         toast.dismiss(loadingToast);
-        toast.error("AI is busy 😴. Try again!");
+        toast.error("AI connection failed. Check console.");
         setActiveSubject(null); 
     } finally {
         setLoading(false);
@@ -140,7 +140,6 @@ function TestCorner() {
       });
       setCorrectCount(rawCorrect);
 
-      // Score Calculation
       const finalScore = rawCorrect * activeSubject.marksPerQuestion;
       
       setScore(finalScore);
