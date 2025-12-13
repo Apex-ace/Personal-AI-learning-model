@@ -259,7 +259,7 @@ function TestCorner() {
                     <School size={40} color="#ea580c"/> Exam Hall
                 </h1>
                 <p style={{color: '#64748b', fontSize: '1.1rem'}}>Select a subject to test your knowledge.</p>
-                <span style={{color: '#3b82f6', fontWeight: 'bold'}}>Current Level: Hard</span>
+                <span style={{color: '#3b82f6', fontWeight: 'bold'}}>All The Best!!!</span>
             </div>
         )}
 
