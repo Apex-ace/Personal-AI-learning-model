@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send } from 'lucide-react';
+import { API_BASE_URL } from '../config'; // <--- IMPORT THIS
 
 function AITutor() {
   const [messages, setMessages] = useState([
@@ -9,7 +10,6 @@ function AITutor() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -22,7 +22,8 @@ function AITutor() {
     setLoading(true);
 
     try {
-        const response = await fetch('https://personal-ai-learning-model.onrender.com/chat_with_tutor', {
+        // ✅ USES LIVE URL
+        const response = await fetch(`${API_BASE_URL}/chat_with_tutor`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: input, grade_level: "5" })

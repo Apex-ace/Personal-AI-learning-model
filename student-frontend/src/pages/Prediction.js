@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase'; 
-import { Calculator, BookOpen, PenTool, Clock, Calendar, Save, Activity } from 'lucide-react'; // Fun Icons
+import { API_BASE_URL } from '../config'; // <--- Imports the Render URL
+import { Calculator, BookOpen, PenTool, Clock, Calendar, Save, Activity } from 'lucide-react';
 
 function Prediction() {
   const [formData, setFormData] = useState({
@@ -21,24 +22,40 @@ function Prediction() {
     Object.keys(formData).forEach(k => payload[k] = parseFloat(formData[k]) || 0);
 
     try {
-        const res = await fetch('http://127.0.0.1:8000/predict', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // ✅ USES LIVE URL
+        const res = await fetch(`${API_BASE_URL}/predict`, {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        
+        if (!res.ok) throw new Error("Backend connection failed");
+        
         const data = await res.json();
         setPrediction(data);
-    } catch (err) { console.error(err); } 
+    } catch (err) { 
+        console.error(err);
+        alert("Could not connect to AI. Please check if the backend is running.");
+    } 
     finally { setLoading(false); }
   };
 
   const saveProgress = async () => {
     if (!prediction) return;
-    const { error } = await supabase.from('student_progress').insert([{
-      math_score: formData["math score"],
-      reading_score: formData["reading score"],
-      total_predicted_marks: prediction.final_marks_prediction
-    }]);
-    if (!error) alert("Mission Saved to History! 🌟");
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+        const { error } = await supabase.from('student_progress').insert([{
+            user_id: user.id,
+            math_score: formData["math score"],
+            reading_score: formData["reading score"],
+            total_predicted_marks: prediction.final_marks_prediction
+        }]);
+        if (!error) alert("Mission Saved to History! 🌟");
+        else alert("Error saving data");
+    } else {
+        alert("Please log in to save!");
+    }
   };
 
   return (
