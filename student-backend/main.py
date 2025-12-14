@@ -178,11 +178,17 @@ def predict(student_data: StudentInput):
         fail_proba = ml_artifacts['classification_model'].predict_proba(X_imputed)[0, 0]
         pass_pred = int(pass_proba >= 0.5)
 
+        # CALCULATE RISK LEVEL (FIXED: Added this logic)
+        if fail_proba > 0.6: risk = 'High'
+        elif fail_proba > 0.3: risk = 'Medium'
+        else: risk = 'Low'
+
         return {
             "final_marks_prediction": round(final_marks, 2),
             "final_pass_prediction": pass_pred,
             "final_pass_probability": round(pass_proba, 4),
-            "final_fail_probability": round(fail_proba, 4)
+            "final_fail_probability": round(fail_proba, 4),
+            "risk_level": risk, # <-- RISK LEVEL INCLUDED
         }
     except Exception as e:
         traceback.print_exc()

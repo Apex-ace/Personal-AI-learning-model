@@ -46,17 +46,26 @@ function Prediction() {
         if (!res.ok) throw new Error("Backend connection failed");
         
         const data = await res.json();
-        setPrediction(data);
+        
+        // FIX: Combine prediction data with input scores needed for TestCorner adaptive logic
+        const finalPredictionData = {
+            ...data,
+            math_score: payload["math score"] || 0,
+            reading_score: payload["reading score"] || 0,
+            writing_score: payload["writing score"] || 0,
+        };
+
+        setPrediction(finalPredictionData);
         
         setChartData({
             labels: ['Passing', 'You', 'Topper'],
             datasets: [
                 {
                     label: 'Marks',
-                    data: [40, data.final_marks_prediction, 95],
+                    data: [40, finalPredictionData.final_marks_prediction, 95],
                     backgroundColor: [
                         '#CBD5E1', 
-                        data.final_marks_prediction < 40 ? '#EF4444' : '#3B82F6', 
+                        finalPredictionData.final_marks_prediction < 40 ? '#EF4444' : '#3B82F6', 
                         '#E2E8F0'
                     ],
                     borderRadius: 8,
@@ -77,7 +86,7 @@ function Prediction() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-        // SAVING FULL DIAGNOSTIC DATA: Requires updated Supabase schema
+        // FIX: The insert payload now correctly includes math_score, reading_score, and writing_score
         const { error } = await supabase.from('student_progress').insert([{
             user_id: user.id,
             // These fields are necessary for TestCorner.js adaptive logic:

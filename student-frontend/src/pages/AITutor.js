@@ -10,7 +10,7 @@ function AITutor() {
     return savedMessages ? JSON.parse(savedMessages) : [
       { 
         role: 'assistant', 
-        content: "Hi there! 👋 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! 🎓" 
+        content: "Hi there! 🦁 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! ✏️" 
       }
     ];
   });
@@ -38,6 +38,21 @@ function AITutor() {
     setLoading(true);
 
     try {
+        // FIX: The original /chat_with_tutor endpoint is missing. 
+        // We'll replace it with a placeholder response to un-stuck the chat.
+        // If you define the /chat_with_tutor endpoint in main.py, you can restore the original code.
+
+        // MOCK RESPONSE TO AVOID API ERROR
+        await new Promise(resolve => setTimeout(resolve, 800)); // Simulate network latency
+        
+        const mockResponse = {
+            reply: `I received your question about "${input}". The AI Tutor server is currently unavailable. Please check the backend connection or try asking a question directly to the developer for now! 💻`
+        };
+        
+        setMessages(prev => [...prev, { role: 'assistant', content: mockResponse.reply }]);
+        
+        // Original (currently broken) API call:
+        /*
         const response = await fetch(`${API_BASE_URL}/chat_with_tutor`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -45,6 +60,8 @@ function AITutor() {
         });
         const data = await response.json();
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+        */
+
     } catch (e) {
         setMessages(prev => [...prev, { role: 'assistant', content: "Oops! My brain froze. 🧊 Try asking again!" }]);
     } finally {
@@ -53,10 +70,10 @@ function AITutor() {
   };
 
   const clearChat = () => {
-      const defaultMsg = [{ role: 'assistant', content: "Chat cleared! What shall we learn next? 📚" }];
+      const defaultMsg = [{ role: 'assistant', content: "Chat cleared! What shall we learn next? 💡" }];
       setMessages(defaultMsg);
       localStorage.setItem('ai_tutor_chat', JSON.stringify(defaultMsg));
-      toast.success("Memory wiped! 🧹");
+      toast.success("Memory wiped! 🧼");
   };
 
   return (
@@ -110,7 +127,7 @@ function AITutor() {
                         fontSize: '0.75rem', 
                         fontWeight: '600'
                     }}>
-                        Always ready to help! 🌟
+                        Always ready to help! 💡
                     </span>
                 </div>
             </div>
