@@ -1,45 +1,71 @@
 import os
-
 import json
-
 import traceback
-
 import google.generativeai as genai
-
 from fastapi import FastAPI, HTTPException
-
 from fastapi.middleware.cors import CORSMiddleware
-
 from pydantic import BaseModel, Field, ConfigDict
-
 from contextlib import asynccontextmanager
-
 from typing import Dict, List, Optional
-
 import pickle
-
 import pandas as pd
-
 import numpy as np
-
 from dotenv import load_dotenv
+load_dotenv() 
 
-# ----------------------------------------------------------------------
-# DYNAMIC MODEL SELECTION STRATEGY
-# ----------------------------------------------------------------------
-# 1. Use the faster model for real-time interaction (Chat, quick evaluations)
-CHAT_MODEL_NAME = "gemini-2.5-flash"       
+GENAI_API_KEY = os.getenv("GEMINI_API_KEY")
+ACTIVE_MODEL_NAME = "models/gemini-2.5-flash" 
 
-# 2. Use the highest capability model for complex, structured, and deep reasoning tasks
-TEST_GENERATION_MODEL_NAME = "gemini-2.5-pro" 
-# ----------------------------------------------------------------------
+if not GENAI_API_KEY:
+    print("⚠️ WARNING: GEMINI_API_KEY not found in .env file.")
+else:
+    try:
+        genai.configure(api_key=GENAI_API_KEY)
+        print("✅ Gemini API Key Loaded.")
+    except Exception as e:
+        print(f"❌ Error configuring Gemini: {e}")
 
+# --- DYNAMIC MODEL SELECTOR ---
+def configure_best_model():
+    """Dynamically sets ACTIVE_MODEL_NAME based on availability and preference."""
+    global ACTIVE_MODEL_NAME
+    print("🔍 Searching for available Gemini models...")
+    try:
+        # List of models, ordered by preference (fastest/most capable first)
+        preferred_order = ["models/gemini-2.5-flash", "models/gemini-2.5-pro", "models/gemini-1.5-flash", "models/gemini-1.0-pro"]
+        
+        # Filter models that support text generation
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        for model in preferred_order:
+            if model in available_models:
+                ACTIVE_MODEL_NAME = model
+                # Use only the short name for logging/clarity in the endpoints
+                short_name = ACTIVE_MODEL_NAME.split('/')[-1]
+                print(f"✅ SUCCESS: Using model '{short_name}'")
+                return
 
-# --- 1. Global State & Lifespan ---
+        if available_models:
+            # Fallback to the first available model if none of the preferred models are found
+            ACTIVE_MODEL_NAME = available_models[0]
+            short_name = ACTIVE_MODEL_NAME.split('/')[-1]
+            print(f"⚠️ Using fallback model: '{short_name}'")
+        else:
+            print("❌ CRITICAL: No generative models found. AI endpoints will fail.")
+            # Keep the default name, but flag the issue
+            ACTIVE_MODEL_NAME = "models/gemini-2.5-flash" 
+            
+    except Exception as e:
+        print(f"❌ Error listing models (check API key permissions/limits): {e}")
+
 ml_artifacts = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # RUN MODEL SELECTION ON STARTUP
+    if GENAI_API_KEY:
+        configure_best_model() 
+    
     # Load artifacts on startup
     try:
         with open('student_performance_artifacts.pkl', 'rb') as f:
@@ -100,9 +126,7 @@ class StudentInput(BaseModel):
     attendance: Optional[float] = Field(None, alias="Attendance (%)")
     study_hours: Optional[float] = Field(None, alias="Daily Study Hours")
 
-    class Config:
-        populate_by_name = True
-        extra = "allow"
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 # Models for NEW Endpoints
 class ChatRequest(BaseModel):
@@ -285,15 +309,15 @@ def recommend(student_data: StudentInput):
         raise HTTPException(500, str(e))
 
 
-# --- 6. Endpoints (AI Chatbot and Test Generation - Using Model Selection) ---
+# --- 6. Endpoints (AI Chatbot and Test Generation - Using Best Available Model) ---
 
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(request: ChatRequest):
-    print(f"📩 Chat using model: {CHAT_MODEL_NAME}")
+    print(f"📩 Chat using model: {ACTIVE_MODEL_NAME}")
     prompt = f"Act as a funny tutor for a {request.grade_level}th grader. Use emojis 🌟. Keep it short. Question: {request.message}"
     try:
-        # Use the faster model for chat
-        model = genai.GenerativeModel(CHAT_MODEL_NAME) 
+        # Use the best available model for chat
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME) 
         response = model.generate_content(prompt)
         return {"reply": response.text}
     except Exception as e:
@@ -304,7 +328,7 @@ async def chat_with_tutor(request: ChatRequest):
 
 @app.post("/generate_full_test")
 async def generate_full_test(req: TestRequest):
-    print(f"📝 Generating {req.difficulty} test using model: {TEST_GENERATION_MODEL_NAME}")
+    print(f"📝 Generating {req.difficulty} test using model: {ACTIVE_MODEL_NAME}")
     
     # Logic for Marks & Questions count
     if req.test_type == "Assignment":
@@ -336,8 +360,8 @@ async def generate_full_test(req: TestRequest):
     }}
     """
     try:
-        # Use the most capable model for complex structured output
-        model = genai.GenerativeModel(TEST_GENERATION_MODEL_NAME)
+        # Use the best available model for structured output
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
         response = model.generate_content(prompt)
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(cleaned_text)
@@ -348,8 +372,7 @@ async def generate_full_test(req: TestRequest):
 
 @app.post("/analyze_test_results")
 async def analyze_test_results(res: TestResult):
-    # Use the fastest model for quick feedback
-    model_name = CHAT_MODEL_NAME
+    model_name = ACTIVE_MODEL_NAME
     prompt = f"""
     Student scored {res.score}/{res.total_marks}.
     Weak areas: {', '.join(res.wrong_answers[:5])}.
@@ -366,8 +389,7 @@ async def analyze_test_results(res: TestResult):
 
 @app.post("/generate_study_plan")
 async def generate_study_plan(student_data: StudentInput):
-    # Use the strongest model for complex analysis
-    model_name = TEST_GENERATION_MODEL_NAME
+    model_name = ACTIVE_MODEL_NAME
     data = student_data.model_dump(by_alias=True)
     prompt = f"Analyze: Math:{data['math score']}, Reading:{data['reading score']}. Return JSON: {{ 'analysis': '...', 'youtube_queries': ['...'], 'quiz': [] }}"
     try:
@@ -380,8 +402,7 @@ async def generate_study_plan(student_data: StudentInput):
 
 @app.post("/evaluate_answer")
 async def evaluate_answer(submission: QuizSubmission):
-    # Use the fastest model for real-time evaluation
-    model_name = CHAT_MODEL_NAME
+    model_name = ACTIVE_MODEL_NAME
     prompt = f"Question: {submission.question} Answer: {submission.student_answer}. Correct? Explain."
     try:
         model = genai.GenerativeModel(model_name)
