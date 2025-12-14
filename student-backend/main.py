@@ -81,11 +81,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Change "*" to your specific Vercel URL for better security later
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # --- 2. Data Models ---
 class StudentInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -105,6 +106,7 @@ class ChatRequest(BaseModel):
 class TestRequest(BaseModel):
     difficulty: str
     test_type: str # "Math", "Reading", "Internal 1", "Assignment"
+    learning_context: Optional[str] = None # NEW: Context from ML prediction
 
 class TestResult(BaseModel):
     score: int
@@ -124,18 +126,17 @@ def predict(student_data: StudentInput):
     try:
         data = student_data.model_dump(by_alias=True)
         
-        # --- SIMPLE PREDICTION LOGIC (Based on existing code) ---
+        # --- SIMPLE PREDICTION LOGIC ---
         avg_score = (data['math score'] + data['reading score'] + data['writing score']) / 3
         pred_marks = round(avg_score * 0.9 + (data['Daily Study Hours'] * 2), 2)
         if pred_marks > 100: pred_marks = 100.0
         
         pass_prob = 0.95 if pred_marks > 40 else 0.45
         risk_level = "High" if pass_prob < 0.6 else "Low"
-        # Adjusted risk_level logic for Medium Risk threshold (50-60 marks)
+        
         if risk_level == "Low" and pred_marks < 60 and pred_marks >= 40:
              risk_level = "Medium" 
         
-        # --- Extract Subject Scores for Adaptive Testing ---
         subject_scores = {
             "math_score": data['math score'],
             "reading_score": data['reading score'],
@@ -146,54 +147,64 @@ def predict(student_data: StudentInput):
             "final_marks_prediction": pred_marks, 
             "final_pass_probability": pass_prob, 
             "risk_level": risk_level,
-            **subject_scores # Inject subject scores into the response
+            **subject_scores
         }
     except Exception:
-        # traceback.print_exc() # For debugging
         return {"final_marks_prediction": 0, "risk_level": "Unknown", "math_score": 0, "reading_score": 0, "writing_score": 0}
 
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(request: ChatRequest):
-    print(f"📩 Chat using model: {ACTIVE_MODEL_NAME}")
     prompt = f"Act as a funny tutor for a {request.grade_level}th grader. Use emojis 🌟. Keep it short. Question: {request.message}"
     try:
         model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
         response = model.generate_content(prompt)
         return {"reply": response.text}
     except Exception as e:
-        print("❌ GEMINI ERROR:")
-        traceback.print_exc()
         return {"reply": f"Error: {str(e)}"}
 
 @app.post("/generate_full_test")
 async def generate_full_test(req: TestRequest):
     print(f"📝 Generating {req.difficulty} test for: {req.test_type}")
+    print(f"🧠 Context: {req.learning_context}")
     
     # Logic for Marks & Questions count
     if req.test_type == "Assignment":
-        count = 10 # 10 Qs * 2 Marks = 20 Marks
+        count = 10 
         subject_prompt = "Mix of critical thinking and problem solving."
     elif "Internal" in req.test_type:
-        count = 20 # 20 Qs * 2 Marks = 40 Marks
+        count = 20 
         subject_prompt = "Mixed subjects: Math (8 questions), Reading (6 questions), Writing (6 questions)."
     else:
-        count = 20 # 20 Qs * 2 Marks = 40 Marks
+        count = 15 # Standard Subject Test
         subject_prompt = f"Strictly 100% {req.test_type} questions."
 
-    prompt = f"""
-    Create a {count}-question multiple-choice test for a 5th/6th grader.
-    Subject Focus: {subject_prompt}
-    Difficulty: {req.difficulty}.
+    # ENHANCED PROMPT LOGIC
+    difficulty_instructions = ""
+    if req.difficulty == "Easy":
+        difficulty_instructions = "Focus on foundational concepts, definitions, and simple examples. Avoid complex logic."
+    elif req.difficulty == "Hard" or req.difficulty == "Very Hard":
+        difficulty_instructions = "Include word problems, multi-step logic, and application-based questions. Challenge the student."
     
-    Respond ONLY in this JSON format:
+    context_instruction = ""
+    if req.learning_context:
+        context_instruction = f"ADAPTIVE INSTRUCTION: {req.learning_context}. Ensure questions specifically address this need."
+
+    prompt = f"""
+    Create a {count}-question multiple-choice test for a 6th grader.
+    Subject: {req.test_type}
+    Difficulty Level: {req.difficulty}
+    
+    {difficulty_instructions}
+    {context_instruction}
+    
+    Respond ONLY in valid JSON format like this:
     {{
         "questions": [
             {{
                 "id": 1,
-                "subject": "{req.test_type}",
                 "question": "Question text...",
                 "options": ["A", "B", "C", "D"],
-                "correct_answer": "Option A"
+                "correct_answer": "Option Text"
             }}
         ]
     }}
@@ -222,28 +233,6 @@ async def analyze_test_results(res: TestResult):
         return json.loads(cleaned_text)
     except Exception as e:
         return {"feedback": "Good effort!", "recommendation": "Review your mistakes."}
-
-@app.post("/generate_study_plan")
-async def generate_study_plan(student_data: StudentInput):
-    data = student_data.model_dump(by_alias=True)
-    prompt = f"Analyze: Math:{data['math score']}, Reading:{data['reading score']}. Return JSON: {{ 'analysis': '...', 'youtube_queries': ['...'], 'quiz': [] }}"
-    try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
-        response = model.generate_content(prompt)
-        cleaned_text = response.text.replace("```json", "").replace("```", "")
-        return json.loads(cleaned_text)
-    except Exception as e:
-        return {}
-
-@app.post("/evaluate_answer")
-async def evaluate_answer(submission: QuizSubmission):
-    prompt = f"Question: {submission.question} Answer: {submission.student_answer}. Correct? Explain."
-    try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
-        response = model.generate_content(prompt)
-        return {"feedback": response.text}
-    except Exception as e:
-        return {"feedback": "Error evaluating answer."}
 
 if __name__ == "__main__":
     import uvicorn

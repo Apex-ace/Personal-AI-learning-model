@@ -1,15 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, Bot, User, Trash2 } from 'lucide-react';
+import { Send, Bot, User, Trash2, Sparkles } from 'lucide-react'; 
 import { API_BASE_URL } from '../config';
-import { toast } from 'react-hot-toast'; // Notification Library
+import { toast } from 'react-hot-toast'; 
 
 function AITutor() {
-  const [messages, setMessages] = useState([
-    { 
-      role: 'assistant', 
-      content: "Hi there! 👋 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! 🚀" 
-    }
-  ]);
+  // Initialize messages from localStorage or use default
+  const [messages, setMessages] = useState(() => {
+    const savedMessages = localStorage.getItem('ai_tutor_chat');
+    return savedMessages ? JSON.parse(savedMessages) : [
+      { 
+        role: 'assistant', 
+        content: "Hi there! 👋 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! 🎓" 
+      }
+    ];
+  });
+  
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -18,6 +23,11 @@ function AITutor() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('ai_tutor_chat', JSON.stringify(messages));
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -43,138 +53,266 @@ function AITutor() {
   };
 
   const clearChat = () => {
-      setMessages([{ role: 'assistant', content: "Chat cleared! What shall we learn next? 🌟" }]);
+      const defaultMsg = [{ role: 'assistant', content: "Chat cleared! What shall we learn next? 📚" }];
+      setMessages(defaultMsg);
+      localStorage.setItem('ai_tutor_chat', JSON.stringify(defaultMsg));
       toast.success("Memory wiped! 🧹");
   };
 
   return (
-    <div className="page-container" style={{height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column'}}>
+    <div className="page-container" style={{
+        height: 'calc(100vh - 70px)', // Optimized for mobile viewport
+        display: 'flex', 
+        flexDirection: 'column', 
+        maxWidth: '100%', 
+        margin: '0 auto', 
+        fontFamily: "'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', sans-serif",
+        backgroundColor: '#FFFBEB' // Very light warm background for whole page
+    }}>
         
-        {/* --- HEADER --- */}
+        {/* --- HEADER (Compact & Friendly) --- */}
         <header style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-            marginBottom: '15px', padding: '0 10px'
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '10px 15px', 
+            backgroundColor: '#FFFAE0', 
+            borderBottom: '3px solid #FFD700', 
+            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+            zIndex: 10
         }}>
-            <div>
-                <h1 style={{margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#3b82f6'}}>
-                    <Bot size={32} color="#3b82f6"/> AI Buddy
-                </h1>
-                <p style={{margin: 0, color: '#64748b', fontSize: '0.9rem'}}>Always here to help!</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                    background: '#fff', 
+                    padding: '5px', 
+                    borderRadius: '50%',
+                    border: '2px solid #FFA500',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 0 #FFC107'
+                }}>
+                    <Bot size={24} color="#FFA500"/>
+                </div>
+                <div>
+                    <h1 style={{
+                        margin: 0, 
+                        fontSize: '1.1rem', 
+                        color: '#D97706', // Darker amber for readability
+                        fontWeight: '800',
+                        lineHeight: '1',
+                        letterSpacing: '0.5px'
+                    }}>
+                        AI Buddy
+                    </h1>
+                    <span style={{
+                        color: '#92400E', 
+                        fontSize: '0.75rem', 
+                        fontWeight: '600'
+                    }}>
+                        Always ready to help! 🌟
+                    </span>
+                </div>
             </div>
+            
             <button onClick={clearChat} style={{
-                background: '#fee2e2', border: 'none', color: '#ef4444', 
-                padding: '8px', borderRadius: '50%', cursor: 'pointer'
-            }}>
+                background: '#FFF0F5', // Lavender Blush
+                border: '2px solid #FF69B4', 
+                color: '#FF1493', 
+                width: '36px', 
+                height: '36px',
+                borderRadius: '12px', // Softer square shape
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'transform 0.1s',
+                boxShadow: '0 3px 0 #FF69B4'
+            }} 
+            active={{ transform: 'translateY(3px)', boxShadow: 'none' }}
+            title="Clear Chat">
                 <Trash2 size={18}/>
             </button>
         </header>
 
-        {/* --- CHAT WINDOW --- */}
-        <div className="card" style={{
-            flex: 1, display: 'flex', flexDirection: 'column', 
-            padding: 0, overflow: 'hidden', border: '4px solid #e0f2fe',
-            background: '#f8fafc'
+        {/* --- CHAT AREA (Simplified Background) --- */}
+        <div style={{
+            flex: 1, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            overflow: 'hidden', 
+            position: 'relative',
+            background: '#F0F9FF', // Very light blue
+            // Subtle dot pattern instead of lines for cleaner look
+            backgroundImage: 'radial-gradient(#BFDBFE 1.5px, transparent 1.5px)',
+            backgroundSize: '20px 20px'
         }}>
             
-            {/* MESSAGES AREA */}
+            {/* MESSAGES LIST */}
             <div style={{
-                flex: 1, overflowY: 'auto', padding: '20px', 
-                display: 'flex', flexDirection: 'column', gap: '20px'
+                flex: 1, 
+                overflowY: 'auto', 
+                padding: '15px', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '18px',
+                paddingBottom: '20px'
             }}>
                 {messages.map((m, i) => (
                     <div key={i} style={{
                         display: 'flex', 
                         justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
                         alignItems: 'flex-end',
-                        gap: '10px'
+                        gap: '8px'
                     }}>
-                        {/* BOT AVATAR (Left) */}
+                        {/* BOT AVATAR */}
                         {m.role === 'assistant' && (
                             <div style={{
-                                width: '35px', height: '35px', borderRadius: '50%', 
-                                background: '#fef08a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                border: '2px solid #fcd34d', flexShrink: 0
+                                width: '32px', height: '32px', borderRadius: '50%',
+                                background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                border: '2px solid #FFA500', flexShrink: 0,
+                                boxShadow: '0 2px 0 #FFA500',
+                                marginBottom: '4px' // Align with bottom of bubble
                             }}>
-                                <Bot size={20} color="#b45309"/>
+                                <Bot size={18} color="#FFA500"/>
                             </div>
                         )}
 
-                        {/* BUBBLE */}
+                        {/* MESSAGE BUBBLE */}
                         <div style={{
-                            maxWidth: '75%',
-                            padding: '15px 20px',
-                            borderRadius: m.role === 'user' ? '20px 20px 0 20px' : '20px 20px 20px 0',
-                            background: m.role === 'user' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'white',
-                            color: m.role === 'user' ? 'white' : '#1e293b',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                            fontSize: '1rem',
-                            lineHeight: '1.5',
-                            border: m.role === 'assistant' ? '1px solid #e2e8f0' : 'none'
+                            maxWidth: '80%', 
+                            padding: '12px 16px', 
+                            borderRadius: '18px',
+                            borderBottomLeftRadius: m.role === 'assistant' ? '4px' : '18px',
+                            borderBottomRightRadius: m.role === 'user' ? '4px' : '18px',
+                            background: m.role === 'user' ? '#38BDF8' : '#FFFFFF', // Brighter Sky Blue
+                            border: m.role === 'user' ? '2px solid #0EA5E9' : '2px solid #FFA500',
+                            color: m.role === 'user' ? '#FFFFFF' : '#333333',
+                            boxShadow: '0 3px 0 rgba(0,0,0,0.1)', // Softer shadow
+                            fontSize: '1rem', 
+                            lineHeight: '1.4',
+                            fontWeight: '500',
+                            wordBreak: 'break-word',
+                            textShadow: m.role === 'user' ? '0 1px 0 rgba(0,0,0,0.1)' : 'none'
                         }}>
                             {m.content}
                         </div>
 
-                        {/* USER AVATAR (Right) */}
+                        {/* USER AVATAR */}
                         {m.role === 'user' && (
                             <div style={{
-                                width: '35px', height: '35px', borderRadius: '50%', 
-                                background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                border: '2px solid #3b82f6', flexShrink: 0
+                                width: '32px', height: '32px', borderRadius: '50%', 
+                                background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                border: '2px solid #0EA5E9', flexShrink: 0,
+                                boxShadow: '0 2px 0 #0EA5E9',
+                                marginBottom: '4px'
                             }}>
-                                <User size={20} color="#1e40af"/>
+                                <User size={18} color="#0EA5E9"/>
                             </div>
                         )}
                     </div>
                 ))}
 
-                {/* TYPING ANIMATION */}
+                {/* LOADING INDICATOR */}
                 {loading && (
-                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                    <div style={{display: 'flex', alignItems: 'flex-end', gap: '8px', marginLeft: '5px'}}>
                         <div style={{
-                                width: '35px', height: '35px', borderRadius: '50%', 
-                                background: '#fef08a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                border: '2px solid #fcd34d'
-                            }}>
-                                <Bot size={20} color="#b45309"/>
-                            </div>
-                        <div style={{
-                            background: 'white', padding: '10px 20px', borderRadius: '20px 20px 20px 0',
-                            border: '1px solid #e2e8f0', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem'
+                            background: '#FFF', padding: '10px 16px', borderRadius: '20px',
+                            borderBottomLeftRadius: '4px',
+                            border: '2px solid #FFA500', 
+                            color: '#F59E0B', 
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            boxShadow: '0 3px 0 rgba(0,0,0,0.05)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
                         }}>
-                            Thinking... 🧠
+                            Thinking <Sparkles size={16} className="animate-spin-slow"/>
                         </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* INPUT AREA */}
+            {/* INPUT AREA (Floating Card Style) */}
             <div style={{
-                padding: '15px', background: 'white', borderTop: '1px solid #f1f5f9',
-                display: 'flex', gap: '10px', alignItems: 'center'
+                padding: '10px 15px 15px 15px', 
+                background: 'linear-gradient(to bottom, rgba(240,249,255,0), #F0F9FF 20%)', // Fade in background
+                display: 'flex', 
+                gap: '10px', 
+                alignItems: 'center'
             }}>
-                <input 
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                    placeholder="Ask me anything..." 
-                    style={{
-                        margin: 0, flex: 1, borderRadius: '25px', padding: '15px 20px',
-                        border: '2px solid #e2e8f0', background: '#f8fafc'
-                    }}
-                />
+                <div style={{
+                    position: 'relative', 
+                    flex: 1, 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    background: '#FFF',
+                    borderRadius: '25px',
+                    border: '3px solid #E2E8F0',
+                    boxShadow: '0 4px 0 #CBD5E1',
+                    transition: 'all 0.2s'
+                }}>
+                    <input 
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="Type your question here..." 
+                        style={{
+                            width: '100%', 
+                            border: 'none', 
+                            background: 'transparent',
+                            padding: '12px 15px',
+                            fontSize: '1rem', 
+                            outline: 'none',
+                            color: '#334155',
+                            fontWeight: '500',
+                            borderRadius: '25px'
+                        }}
+                        onFocus={(e) => {
+                            e.target.parentElement.style.borderColor = '#38BDF8';
+                            e.target.parentElement.style.boxShadow = '0 4px 0 #0EA5E9';
+                        }}
+                        onBlur={(e) => {
+                            e.target.parentElement.style.borderColor = '#E2E8F0';
+                            e.target.parentElement.style.boxShadow = '0 4px 0 #CBD5E1';
+                        }}
+                    />
+                </div>
+                
                 <button 
                     onClick={sendMessage} 
                     disabled={!input.trim() || loading}
                     style={{
-                        width: '50px', height: '50px', borderRadius: '50%', 
-                        background: input.trim() ? '#3b82f6' : '#e2e8f0', 
-                        border: 'none', cursor: input.trim() ? 'pointer' : 'default',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: '0.2s', boxShadow: input.trim() ? '0 4px 10px rgba(59, 130, 246, 0.3)' : 'none'
+                        width: '50px', 
+                        height: '50px', 
+                        borderRadius: '16px', // Squircle shape
+                        background: input.trim() ? '#22C55E' : '#E2E8F0', // Bright Green
+                        border: 'none',
+                        cursor: input.trim() ? 'pointer' : 'default',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'all 0.1s ease', 
+                        boxShadow: input.trim() ? '0 4px 0 #15803D' : '0 4px 0 #94A3B8', 
+                        transform: 'translateY(0)',
+                        flexShrink: 0
+                    }}
+                    onMouseDown={(e) => {
+                        if(input.trim()) {
+                            e.currentTarget.style.transform = 'translateY(4px)';
+                            e.currentTarget.style.boxShadow = '0 0 0 #15803D';
+                        }
+                    }}
+                    onMouseUp={(e) => {
+                        if(input.trim()) {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 0 #15803D';
+                        }
                     }}
                 >
-                    <Send size={20} color="white"/>
+                    <Send size={24} color={input.trim() ? 'white' : '#94A3B8'} strokeWidth={2.5} style={{marginLeft: input.trim() ? '-2px' : '0'}}/>
                 </button>
             </div>
 

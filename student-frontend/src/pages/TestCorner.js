@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { 
     BookOpen, CheckCircle, XCircle, Calculator, PenTool, 
     Layers, ClipboardList, School, ArrowLeft, RefreshCw,
-    ChevronLeft, ChevronRight, Zap, TrendingDown
+    ChevronLeft, ChevronRight, Zap, Target
 } from 'lucide-react';
 
 function TestCorner() {
@@ -21,43 +21,43 @@ function TestCorner() {
   const [adaptiveRecommendation, setAdaptiveRecommendation] = useState(null);
   const [predictionLoaded, setPredictionLoaded] = useState(false); 
 
-  // --- 1. EXAM HALL CONFIGURATION ---
+  // --- 1. EXAM HALL CONFIGURATION (COLORFUL KID-FRIENDLY PALETTE) ---
   const subjects = [
       { 
           id: 'math', 
           name: 'Math Test', 
           test_type: 'Math', 
-          icon: <Calculator size={32}/>, color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' 
+          icon: <Calculator size={32}/>, color: '#0ea5e9', bg: '#e0f2fe', border: '#7dd3fc' // Sky Blue
       },
       { 
           id: 'reading', 
           name: 'Reading Test', 
           test_type: 'Reading', 
-          icon: <BookOpen size={32}/>, color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8' 
+          icon: <BookOpen size={32}/>, color: '#8b5cf6', bg: '#ede9fe', border: '#c4b5fd' // Violet
       },
       { 
           id: 'writing', 
           name: 'Writing Test', 
           test_type: 'Writing', 
-          icon: <PenTool size={32}/>, color: '#eab308', bg: '#fefce8', border: '#fde047' 
+          icon: <PenTool size={32}/>, color: '#f59e0b', bg: '#fef3c7', border: '#fcd34d' // Amber
       },
       { 
           id: 'internal1', 
           name: 'Internal 1', 
           test_type: 'Internal 1', 
-          icon: <Layers size={32}/>, color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe' 
+          icon: <Layers size={32}/>, color: '#10b981', bg: '#d1fae5', border: '#6ee7b7' // Emerald
       },
       { 
           id: 'internal2', 
           name: 'Internal 2', 
           test_type: 'Internal 2', 
-          icon: <Layers size={32}/>, color: '#a855f7', bg: '#faf5ff', border: '#e9d5ff' 
+          icon: <Layers size={32}/>, color: '#06b6d4', bg: '#cffafe', border: '#67e8f9' // Cyan
       },
       { 
           id: 'assignment', 
           name: 'Assignment', 
           test_type: 'Assignment', 
-          icon: <ClipboardList size={32}/>, color: '#22c55e', bg: '#f0fdf4', border: '#bbf7d0' 
+          icon: <ClipboardList size={32}/>, color: '#6366f1', bg: '#e0e7ff', border: '#a5b4fc' // Indigo
       },
   ];
 
@@ -67,54 +67,52 @@ function TestCorner() {
       
       const { risk_level, math_score, reading_score, writing_score } = prediction;
       
+      // Scenario A: High Performer
       if (risk_level === 'Low') {
           return {
-              subjectName: 'Internal 2',
-              test_type: 'Internal 2',
+              subjectName: 'Advanced Challenge',
+              test_type: 'Internal 2', // Use a mixed test type
               difficulty: 'Very Hard',
-              reason: 'Excellent performance! Let\'s tackle the toughest topics to maintain your lead.'
+              context: 'Student is a high performer with Low Risk. Provide complex, application-based questions to challenge them.',
+              reason: '🚀 You are crushing it! We curated a "Champion Level" challenge to push your limits.'
           };
       }
       
       const scores = {
-          'Math': math_score,
-          'Reading': reading_score,
-          'Writing': writing_score
+          'Math': parseFloat(math_score) || 0,
+          'Reading': parseFloat(reading_score) || 0,
+          'Writing': parseFloat(writing_score) || 0
       };
       
       let weakestSubject = null;
       let lowestScore = 100;
 
       for (const [subject, score] of Object.entries(scores)) {
-          // The scores from DB are numbers, but may need explicit conversion if stored as strings/decimals
-          const numericScore = parseFloat(score); 
-          if (numericScore < lowestScore) {
-              lowestScore = numericScore;
+          if (score < lowestScore) {
+              lowestScore = score;
               weakestSubject = subject;
           }
       }
 
-      // Determine corrective action based on weakness
-      if (weakestSubject && lowestScore < 60) {
-          const difficulty = (risk_level === 'High' || lowestScore < 40) ? 'Easy' : 'Medium';
+      // Scenario B: Specific Weakness Identified
+      if (weakestSubject && lowestScore < 65) {
           return {
-              subjectName: `${weakestSubject} Test`,
+              subjectName: `${weakestSubject} Booster`,
               test_type: weakestSubject,
-              difficulty: difficulty,
-              reason: `Your lowest score (${Math.round(lowestScore)}%) is in ${weakestSubject}. Let's reinforce fundamentals in this area.`
+              difficulty: 'Easy', // Start easy to build confidence
+              context: `Student scored low (${lowestScore}%) in ${weakestSubject}. Focus on fundamental concepts, definitions, and easy examples to rebuild basics.`,
+              reason: `💡 We noticed a dip in ${weakestSubject} (${lowestScore}%). Let's fix the basics with a quick booster session!`
           };
       }
       
-      if (risk_level === 'Medium') {
-          return {
-              subjectName: 'Internal 1',
-              test_type: 'Internal 1',
-              difficulty: 'Hard',
-              reason: 'Good overall scores. Let\'s use the Internal 1 drill to boost exam readiness!'
-          };
-      }
-      
-      return null;
+      // Scenario C: Medium Performer / Average
+      return {
+          subjectName: 'Exam Prep Drill',
+          test_type: 'Internal 1',
+          difficulty: 'Medium',
+          context: 'Student is performing averagely. Provide a balanced mix of conceptual and practical questions.',
+          reason: '📊 Steady progress! Here is a balanced drill to keep you exam-ready.'
+      };
   };
 
   // --- 3. SUPABASE FETCH EFFECT ---
@@ -124,7 +122,6 @@ function TestCorner() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (user) {
-            // Fetch the single most recent prediction entry from the updated schema
             const { data, error } = await supabase
               .from('student_progress')
               .select('risk_level, math_score, reading_score, writing_score')
@@ -137,7 +134,6 @@ function TestCorner() {
                 console.error("Error fetching prediction history:", error);
                 toast.error("Could not load past performance data.");
             } else if (data) {
-                // Pass the fetched data directly to the adaptive calculation
                 setAdaptiveRecommendation(calculateAdaptiveTest(data));
             }
         }
@@ -148,24 +144,29 @@ function TestCorner() {
   }, []); 
 
   // --- 4. TEST GENERATION ---
-  const generateTest = async (subject, difficultyOverride = "Hard") => {
+  const generateTest = async (subject, difficultyOverride = null, contextOverride = null) => {
     setLoading(true);
     setQuestions([]);
     setScore(null);
     setAnswers({});
     setIsSubmitted(false);
-    setActiveSubject(subject.name);
+    setActiveSubject(subject.name || subject.subjectName);
     setCurrentIndex(0); 
     
-    const loadingToast = toast.loading(`Generating ${subject.name}...`);
+    // Use values from subject object OR overrides
+    const difficulty = difficultyOverride || "Hard"; 
+    const context = contextOverride || "";
+    
+    const loadingToast = toast.loading(`Generating ${subject.name || subject.subjectName}...`);
     
     try {
         const res = await fetch(`${API_BASE_URL}/generate_full_test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                difficulty: difficultyOverride, 
-                test_type: subject.test_type 
+                difficulty: difficulty, 
+                test_type: subject.test_type,
+                learning_context: context // Sending the adaptive context to backend
             })
         });
         
@@ -181,7 +182,7 @@ function TestCorner() {
 
         setQuestions(parsedQuestions);
         toast.dismiss(loadingToast);
-        toast.success(`${subject.name} Ready! 🍀`);
+        toast.success(`Mission Started! 🚀`);
 
     } catch (err) {
         console.error(err);
@@ -229,22 +230,22 @@ function TestCorner() {
       const currentQ = questions[currentIndex];
       const isSelected = answers[currentIndex] === option;
 
-      if (!isSubmitted) return isSelected ? '#dbeafe' : 'white';
+      if (!isSubmitted) return isSelected ? '#e0f2fe' : 'white'; // Light Sky Blue for selection
       
-      if (option === currentQ.correct_answer) return '#dcfce7'; 
-      if (isSelected && option !== currentQ.correct_answer) return '#fee2e2'; 
-      return '#f1f5f9'; 
+      if (option === currentQ.correct_answer) return '#dcfce7'; // Green-100
+      if (isSelected && option !== currentQ.correct_answer) return '#fee2e2'; // Red-100 (kept minimal for wrong answer feedback)
+      return '#f8fafc'; 
   };
 
   const getButtonBorder = (option) => {
       const currentQ = questions[currentIndex];
       const isSelected = answers[currentIndex] === option;
 
-      if (!isSubmitted) return isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0';
+      if (!isSubmitted) return isSelected ? '2px solid #0ea5e9' : '1px solid #cbd5e1'; // Sky Blue border
       
-      if (option === currentQ.correct_answer) return '2px solid #22c55e'; 
-      if (isSelected && option !== currentQ.correct_answer) return '2px solid #ef4444'; 
-      return '1px solid #e2e8f0';
+      if (option === currentQ.correct_answer) return '2px solid #22c55e'; // Green-500
+      if (isSelected && option !== currentQ.correct_answer) return '2px solid #ef4444'; // Red-500
+      return '1px solid #cbd5e1';
   };
 
   const currentQ = questions[currentIndex];
@@ -256,10 +257,10 @@ function TestCorner() {
         {!questions.length && (
             <div style={{textAlign: 'center', marginBottom: '40px', marginTop: '20px'}}>
                 <h1 style={{fontSize: '2.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', color: '#1e293b', marginBottom: '10px'}}>
-                    <School size={40} color="#ea580c"/> Exam Hall
+                    <School size={40} color="#8b5cf6"/> Exam Hall
                 </h1>
                 <p style={{color: '#64748b', fontSize: '1.1rem'}}>Select a subject to test your knowledge.</p>
-                <span style={{color: '#3b82f6', fontWeight: 'bold'}}>All The Best!!!</span>
+                <span style={{color: '#8b5cf6', fontWeight: 'bold'}}>All The Best!!!</span>
             </div>
         )}
 
@@ -276,35 +277,44 @@ function TestCorner() {
         {predictionLoaded && !questions.length && !loading && adaptiveRecommendation && (
             <div className="card" style={{
                 marginBottom: '30px', 
-                background: '#fffaeb', 
-                border: '2px dashed #fcd34d' 
+                background: 'linear-gradient(to right, #e0f2fe, #f0f9ff)', // Light Blue Gradient
+                border: '2px dashed #3b82f6', // Blue Border
+                position: 'relative',
+                overflow: 'hidden'
             }}>
-                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
-                    <h3 style={{display:'flex', alignItems:'center', gap:'10px', marginTop:0, color:'#b45309'}}>
-                        <Zap size={24} color="#b45309"/> AI Recommended Mission
+                <div style={{position:'absolute', right:'-10px', top:'-10px', fontSize:'5rem', opacity:'0.1'}}>🎯</div>
+                
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom:'15px'}}>
+                    <h3 style={{display:'flex', alignItems:'center', gap:'10px', marginTop:0, color:'#0369a1', fontSize:'1.4rem'}}>
+                        <Target size={28} color="#0284c7"/> AI Mission Plan
                     </h3>
-                    <span style={{fontWeight: 'bold', color: '#f59e0b', fontSize: '0.9rem'}}>
-                        {adaptiveRecommendation.difficulty}
+                    <span style={{
+                        background:'#bae6fd', color:'#0369a1', padding:'5px 12px', 
+                        borderRadius:'20px', fontSize:'0.85rem', fontWeight:'bold', border:'1px solid #7dd3fc'
+                    }}>
+                        {adaptiveRecommendation.difficulty} Mode
                     </span>
                 </div>
                 
-                <p style={{color: '#78350f', marginBottom: '20px', fontSize: '1.1rem'}}>
+                <p style={{color: '#0c4a6e', marginBottom: '20px', fontSize: '1.1rem', lineHeight: '1.5'}}>
                     {adaptiveRecommendation.reason}
                 </p>
 
                 <button 
-                    onClick={() => generateTest(subjects.find(s => s.test_type === adaptiveRecommendation.test_type), adaptiveRecommendation.difficulty)} 
+                    onClick={() => generateTest(adaptiveRecommendation, adaptiveRecommendation.difficulty, adaptiveRecommendation.context)} 
                     className="btn-primary" 
                     style={{
-                        background: '#f97316', 
+                        background: '#0ea5e9', 
                         width: '100%', 
                         display: 'flex', 
                         justifyContent: 'center', 
                         alignItems: 'center', 
-                        gap: '10px'
+                        gap: '10px',
+                        padding: '14px',
+                        fontSize: '1.1rem'
                     }}
                 >
-                    <TrendingDown size={20}/> Start {adaptiveRecommendation.subjectName} ({adaptiveRecommendation.difficulty})
+                    <Zap size={22} fill="white"/> Activate Mission: {adaptiveRecommendation.subjectName}
                 </button>
             </div>
         )}
@@ -318,8 +328,8 @@ function TestCorner() {
             }}>
                 
                 {!adaptiveRecommendation && (
-                     <div style={{gridColumn: '1 / -1', textAlign: 'center', marginBottom: '10px', padding: '15px', background: '#e0f2fe', borderRadius: '10px', color: '#0369a1'}}>
-                         <p>💡 Run a **Stats & Predict** mission first to unlock personalized recommendations!</p>
+                     <div style={{gridColumn: '1 / -1', textAlign: 'center', marginBottom: '10px', padding: '15px', background: '#f3e8ff', borderRadius: '10px', color: '#7c3aed'}}>
+                         <p>⚡ Run a **Stats & Predict** mission first to unlock personalized recommendations!</p>
                      </div>
                 )}
 
@@ -332,7 +342,7 @@ function TestCorner() {
                     }}>
                         <div style={{color: sub.color}}>{sub.icon}</div>
                         <h3 style={{margin: 0, fontSize: '1.4rem', color: '#334155'}}>{sub.name}</h3>
-                        <span style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b'}}>Start Exam (Hard)</span>
+                        <span style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b'}}>Start Exam (Manual)</span>
                     </div>
                 ))}
             </div>
@@ -344,6 +354,7 @@ function TestCorner() {
             <div style={{textAlign: 'center', marginTop: '50px'}}>
                 <div className="loader" style={{marginBottom: '20px'}}></div>
                 <h2>Preparing {activeSubject}...</h2>
+                <p style={{color:'#64748b'}}>AI is curating questions based on your profile.</p>
             </div>
         )}
 
@@ -357,7 +368,7 @@ function TestCorner() {
                         style={{background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '5px', color: '#64748b', cursor: 'pointer', fontSize: '0.9rem'}}>
                         <ArrowLeft size={18}/> Quit
                     </button>
-                    <span style={{fontWeight: 'bold', color: '#3b82f6'}}>
+                    <span style={{fontWeight: 'bold', color: '#0ea5e9'}}>
                         Question {currentIndex + 1} / {questions.length}
                     </span>
                 </div>
@@ -365,8 +376,8 @@ function TestCorner() {
                 {/* SCORE BANNER (Only shows after submit) */}
                 {isSubmitted && (
                     <div style={{
-                        background: score === questions.length ? '#dcfce7' : '#fff7ed',
-                        border: score === questions.length ? '2px solid #22c55e' : '2px solid #f97316',
+                        background: score === questions.length ? '#dcfce7' : '#fef3c7',
+                        border: score === questions.length ? '2px solid #22c55e' : '2px solid #f59e0b',
                         borderRadius: '12px', padding: '15px', textAlign: 'center', marginBottom: '20px'
                     }}>
                         <h2 style={{margin: 0, fontSize: '1.5rem', color: '#1e293b'}}>Score: {score} / {questions.length}</h2>
@@ -396,8 +407,8 @@ function TestCorner() {
                             }}>
                             {opt}
                             {/* Icons for Review Mode */}
-                            {isSubmitted && opt === currentQ.correct_answer && <CheckCircle size={20} color="#16a34a" style={{position:'absolute', right:'15px', top:'16px'}}/>}
-                            {isSubmitted && answers[currentIndex] === opt && answers[currentIndex] !== currentQ.correct_answer && <XCircle size={20} color="#dc2626" style={{position:'absolute', right:'15px', top:'16px'}}/>}
+                            {isSubmitted && opt === currentQ.correct_answer && <CheckCircle size={20} color="#22c55e" style={{position:'absolute', right:'15px', top:'16px'}}/>}
+                            {isSubmitted && answers[currentIndex] === opt && answers[currentIndex] !== currentQ.correct_answer && <XCircle size={20} color="#ef4444" style={{position:'absolute', right:'15px', top:'16px'}}/>}
                         </button>
                     ))}
                 </div>
@@ -428,7 +439,7 @@ function TestCorner() {
                     {currentIndex === questions.length - 1 ? (
                         !isSubmitted ? (
                             <button onClick={submitTest} className="btn-primary" 
-                                style={{padding: '12px 30px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                style={{padding: '12px 30px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', background: '#0ea5e9'}}>
                                 Submit Exam <CheckCircle size={20}/>
                             </button>
                         ) : (
@@ -442,7 +453,7 @@ function TestCorner() {
                         )
                     ) : (
                         <button onClick={handleNext} className="btn-primary"
-                            style={{padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '5px'}}>
+                            style={{padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '5px', background: '#0ea5e9'}}>
                             Next <ChevronRight size={20}/>
                         </button>
                     )}

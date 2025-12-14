@@ -29,18 +29,34 @@ function Login() {
   return (
     <div style={{
         height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)'
+        background: '#FFFBEB', // Updated background
+        fontFamily: "'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', sans-serif"
     }}>
-      <div className="card" style={{maxWidth: '400px', width: '100%', textAlign: 'center', padding: '40px'}}>
+      <div className="card" style={{
+          maxWidth: '400px', width: '100%', textAlign: 'center', padding: '40px',
+          background: '#FFF',
+          border: '3px solid #E0E7FF', // Soft Indigo border
+          borderRadius: '30px',
+          boxShadow: '0 8px 0 rgba(0,0,0,0.05)'
+      }}>
         <div style={{
-            width: '80px', height: '80px', background: 'white', borderRadius: '50%', margin: '0 auto 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem',
-            boxShadow: '0 10px 25px rgba(59, 130, 246, 0.2)'
+            width: '100px', height: '100px', background: 'white', borderRadius: '50%', margin: '0 auto 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem',
+            border: '4px solid #E0F2FE', // Light Blue ring
+            boxShadow: '0 4px 0 #E0E7FF'
         }}>
             🦁
         </div>
-        <h1 style={{color: '#3b82f6', marginBottom: '10px'}}>Junior Genius</h1>
-        <p style={{color: '#64748b', marginBottom: '30px'}}>
+        <h1 style={{
+            color: '#3B82F6', 
+            marginBottom: '10px', 
+            fontSize: '2rem', 
+            fontWeight: '800',
+            textShadow: '1px 1px 0 #E0E7FF'
+        }}>
+            Junior Genius
+        </h1>
+        <p style={{color: '#64748B', marginBottom: '30px', fontSize: '1.1rem', fontWeight: '600'}}>
             {isSignUp ? "Join the adventure!" : "Welcome back, Champ!"}
         </p>
 
@@ -48,19 +64,40 @@ function Login() {
             <input 
                 type="email" placeholder="Email Address" required
                 value={email} onChange={(e) => setEmail(e.target.value)}
-                style={{marginBottom: '15px', width: '100%'}}
+                style={{
+                    marginBottom: '15px', width: '100%',
+                    padding: '14px', borderRadius: '15px', border: '2px solid #E2E8F0',
+                    fontSize: '1rem', outline: 'none', backgroundColor: '#F8FAFC',
+                    transition: 'border-color 0.2s', boxSizing: 'border-box'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#60A5FA'}
+                onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
             />
             <input 
                 type="password" placeholder="Password" required
                 value={password} onChange={(e) => setPassword(e.target.value)}
-                style={{marginBottom: '20px', width: '100%'}}
+                style={{
+                    marginBottom: '25px', width: '100%',
+                    padding: '14px', borderRadius: '15px', border: '2px solid #E2E8F0',
+                    fontSize: '1rem', outline: 'none', backgroundColor: '#F8FAFC',
+                    transition: 'border-color 0.2s', boxSizing: 'border-box'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#60A5FA'}
+                onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
             />
-            <button className="btn-primary" disabled={loading}>
+            <button className="btn-primary" disabled={loading} style={{
+                width: '100%', padding: '14px', fontSize: '1.1rem', fontWeight: '700',
+                background: '#3B82F6', color: 'white', border: 'none', borderRadius: '16px',
+                cursor: 'pointer', boxShadow: '0 4px 0 #1D4ED8', transition: 'transform 0.1s'
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(2px)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
                 {loading ? "Processing..." : (isSignUp ? "Sign Up" : "Log In")}
             </button>
         </form>
 
-        <p style={{marginTop: '20px', fontSize: '0.9rem', color: '#64748b', cursor: 'pointer'}} 
+        <p style={{marginTop: '25px', fontSize: '1rem', color: '#64748B', cursor: 'pointer', fontWeight: '600'}} 
            onClick={() => setIsSignUp(!isSignUp)}>
             {isSignUp ? "Already have an account? Log In" : "Need an account? Sign Up"}
         </p>
