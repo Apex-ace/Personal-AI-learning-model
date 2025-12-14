@@ -189,7 +189,9 @@ async def chat_with_tutor(req: ChatRequest):
         return {"reply": res.text}
 
     except Exception as e:
-        return {"reply": "Tutor is unavailable right now."}
+        print("❌ Gemini Tutor Error:", str(e))
+        return {"reply": f"Tutor error: {str(e)}"}
+
 
 # ---------------------------------------------------------
 # TEST GENERATION
