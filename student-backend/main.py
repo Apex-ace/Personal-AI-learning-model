@@ -1,166 +1,207 @@
 import os
 import json
-import joblib
+import pickle
+import traceback
+import pandas as pd
 import numpy as np
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-# ================= ENV =================
-load_dotenv()
+import google.generativeai as genai
 
-# ================= APP =================
-app = FastAPI(title="Personal AI Learning Model")
+# =========================================================
+# ENV + GEMINI SETUP
+# =========================================================
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+ACTIVE_GEMINI_MODEL = None
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+def select_available_gemini_model():
+    global ACTIVE_GEMINI_MODEL
+    try:
+        models = genai.list_models()
+        for m in models:
+            if "generateContent" in m.supported_generation_methods:
+                ACTIVE_GEMINI_MODEL = m.name
+                print(f"⚠️ Using fallback Gemini model: {ACTIVE_GEMINI_MODEL}")
+                return
+    except Exception as e:
+        print("❌ Gemini model detection failed:", e)
+
+# =========================================================
+# ML ARTIFACTS
+# =========================================================
+ml_artifacts = {}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Gemini
+    if GEMINI_API_KEY:
+        select_available_gemini_model()
+        print("✅ Gemini enabled")
+
+    # Load YOUR model
+    try:
+        with open("student_performance_artifacts.pkl", "rb") as f:
+            artifacts = pickle.load(f)
+
+        ml_artifacts["model"] = artifacts["regression_model"]
+        ml_artifacts["imputer"] = artifacts["imputer"]
+        ml_artifacts["numeric_features"] = artifacts["numeric_features"]
+
+        print("✅ ML artifacts loaded successfully")
+
+    except Exception as e:
+        print("❌ ML load error:", e)
+
+    yield
+    ml_artifacts.clear()
+
+# =========================================================
+# FASTAPI APP
+# =========================================================
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ================= GEMINI =================
-import google.generativeai as genai
-
-GEMINI_ENABLED = False
-GEMINI_MODEL = None
-
-try:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    models = [
-        m.name for m in genai.list_models()
-        if "generateContent" in m.supported_generation_methods
-    ]
-    if models:
-        GEMINI_MODEL = genai.GenerativeModel(models[0])
-        GEMINI_ENABLED = True
-        print(f"⚠️ Using Gemini model: {models[0]}")
-except Exception as e:
-    print("❌ Gemini disabled:", e)
-
-# ================= ML LOAD =================
-MODEL = None
-SCALER = None
-
-try:
-    MODEL = joblib.load("model.pkl")
-    SCALER = joblib.load("scaler.pkl")
-    print("✅ ML artifacts loaded successfully")
-except Exception as e:
-    print("❌ ML load error:", e)
-
-# ================= SCHEMAS =================
-class PredictInput(BaseModel):
-    math: float
-    reading: float
-    writing: float
-    hours_per_day: float
+# =========================================================
+# REQUEST MODELS (MATCH FRONTEND)
+# =========================================================
+class PredictionInput(BaseModel):
+    math_score: float
+    reading_score: float
+    writing_score: float
+    internal_test_1: float
+    internal_test_2: float
+    assignment_score: float
     attendance: float
-    assignment: float
-    internal1: float
-    internal2: float
+    study_hours: float
 
-class TutorInput(BaseModel):
+class TutorRequest(BaseModel):
     message: str
+    predicted_marks: float
 
-class TestInput(BaseModel):
-    test_type: str
+class TestRequest(BaseModel):
+    subject: str
     difficulty: str
-    learning_context: str | None = ""
 
-# ================= HELPERS =================
-def clamp(value, low=0, high=100):
-    try:
-        value = float(value)
-        return max(low, min(high, value))
-    except:
-        return low
-
-# ================= ROUTES =================
+# =========================================================
+# ROOT (PREVENT 404 CONFUSION)
+# =========================================================
 @app.get("/")
 def root():
-    return {"status": "AI Brain Online 🧠"}
+    return {"status": "AI Learning Backend Running"}
 
+# =========================================================
+# PREDICTION (USES YOUR ML MODEL)
+# =========================================================
 @app.post("/predict")
-def predict(data: PredictInput):
-    if MODEL is None or SCALER is None:
+def predict(data: PredictionInput):
+
+    if "model" not in ml_artifacts:
         raise HTTPException(status_code=500, detail="ML model not loaded")
 
-    features = np.array([[
-        data.math,
-        data.reading,
-        data.writing,
-        data.hours_per_day,
-        data.attendance,
-        data.assignment,
-        data.internal1,
-        data.internal2
-    ]])
+    try:
+        df = pd.DataFrame([{
+            "math score": data.math_score,
+            "reading score": data.reading_score,
+            "writing score": data.writing_score,
+            "Internal Test 1 (out of 40)": data.internal_test_1,
+            "Internal Test 2 (out of 40)": data.internal_test_2,
+            "Assignment Score (out of 10)": data.assignment_score,
+            "Attendance (%)": data.attendance,
+            "Daily Study Hours": data.study_hours
+        }])
 
-    features = SCALER.transform(features)
-    prediction = MODEL.predict(features)[0]
+        df = ml_artifacts["imputer"].transform(df)
+        prediction = ml_artifacts["model"].predict(df)[0]
 
-    predicted_marks = clamp(prediction)
-    chance = clamp(predicted_marks)
-
-    if predicted_marks < 40:
-        risk = "High"
-    elif predicted_marks < 70:
-        risk = "Medium"
-    else:
         risk = "Low"
+        if prediction < 40:
+            risk = "High"
+        elif prediction < 60:
+            risk = "Medium"
 
-    return {
-        "predicted_marks": round(predicted_marks, 2),
-        "chance": round(chance, 2),
-        "risk_level": risk,
-        "math_score": data.math,
-        "reading_score": data.reading,
-        "writing_score": data.writing
-    }
+        return {
+            "predicted_marks": round(float(prediction), 2),
+            "risk_level": risk
+        }
 
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Prediction failed")
+
+# =========================================================
+# AI TUTOR (OLD SIMPLE PROMPT)
+# =========================================================
 @app.post("/chat_with_tutor")
-def chat_with_tutor(data: TutorInput):
-    if not GEMINI_ENABLED:
-        return {"reply": "Tutor is unavailable right now 😴"}
+def chat_with_tutor(data: TutorRequest):
 
-    try:
-        prompt = f"You are a friendly AI tutor. Answer clearly and simply:\n{data.message}"
-        response = GEMINI_MODEL.generate_content(prompt)
-        return {"reply": response.text}
-    except Exception:
-        return {"reply": "Tutor is unavailable right now 😴"}
+    if not ACTIVE_GEMINI_MODEL:
+        return {"reply": "Tutor is unavailable right now."}
 
-@app.post("/generate_full_test")
-def generate_test(data: TestInput):
-    if not GEMINI_ENABLED:
-        return {"questions": []}
+    prompt = f"""
+You are a helpful study assistant.
 
-    try:
-        prompt = f"""
-Generate 5 multiple-choice questions.
+Student predicted score: {data.predicted_marks} out of 100.
 
-Subject: {data.test_type}
-Difficulty: {data.difficulty}
-Context: {data.learning_context}
+Student question:
+{data.message}
 
-Return ONLY valid JSON like:
-[
-  {{
-    "question": "",
-    "options": ["A","B","C","D"],
-    "correct_answer": "A"
-  }}
-]
+Explain clearly using simple words.
+Give step-by-step help.
+Keep it short.
 """
-        response = GEMINI_MODEL.generate_content(prompt)
-        text = response.text.strip()
 
-        json_start = text.find("[")
-        questions = json.loads(text[json_start:])
+    try:
+        model = genai.GenerativeModel(ACTIVE_GEMINI_MODEL)
+        response = model.generate_content(prompt)
+        return {"reply": response.text}
 
-        return {"questions": questions}
+    except Exception as e:
+        traceback.print_exc()
+        return {"reply": "Tutor is unavailable right now."}
+
+# =========================================================
+# QUESTION GENERATION (OLD STABLE PROMPT)
+# =========================================================
+@app.post("/generate_full_test")
+def generate_test(data: TestRequest):
+
+    if not ACTIVE_GEMINI_MODEL:
+        return {"error": "AI is busy. Try again!"}
+
+    prompt = f"""
+Create a question paper.
+
+Subject: {data.subject}
+Difficulty: {data.difficulty}
+
+Include:
+1. Five multiple choice questions
+2. Three short answer questions
+3. Two long answer questions
+
+Only list the questions.
+"""
+
+    try:
+        model = genai.GenerativeModel(ACTIVE_GEMINI_MODEL)
+        response = model.generate_content(prompt)
+        return {"questions": response.text}
+
     except Exception:
-        return {"questions": []}
+        return {"error": "AI is busy. Try again!"}
