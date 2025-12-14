@@ -1,24 +1,17 @@
 import os
+import json
 import joblib
 import numpy as np
-import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
-import google.generativeai as genai
-
-# ------------------------------------
-# ENV
-# ------------------------------------
+# ================= ENV =================
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# ------------------------------------
-# APP
-# ------------------------------------
-app = FastAPI()
+# ================= APP =================
+app = FastAPI(title="Personal AI Learning Model")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,164 +21,146 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------------------------
-# GEMINI (AUTO SAFE)
-# ------------------------------------
-gemini_model = None
+# ================= GEMINI =================
+import google.generativeai as genai
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    for model_name in [
-        "models/gemini-2.5-flash",
-        "models/gemini-1.5-flash",
-        "models/gemini-1.5-pro",
-    ]:
-        try:
-            gemini_model = genai.GenerativeModel(model_name)
-            gemini_model.generate_content("hello")
-            print(f"✅ Gemini using {model_name}")
-            break
-        except Exception:
-            continue
-
-if not gemini_model:
-    print("⚠️ Gemini unavailable")
-
-# ------------------------------------
-# ML LOAD (BULLETPROOF)
-# ------------------------------------
-ml = {}
+GEMINI_ENABLED = False
+GEMINI_MODEL = None
 
 try:
-    ml["classifier"] = joblib.load("models/classifier.pkl")
-    ml["regression"] = joblib.load("models/regression.pkl")
-    ml["imputer"] = joblib.load("models/imputer.pkl")
-
-    # 🔥 FIX: derive columns safely
-    ml["X_columns"] = list(
-        ml["imputer"].feature_names_in_
-    )
-
-    print("✅ ML loaded")
-
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    models = [
+        m.name for m in genai.list_models()
+        if "generateContent" in m.supported_generation_methods
+    ]
+    if models:
+        GEMINI_MODEL = genai.GenerativeModel(models[0])
+        GEMINI_ENABLED = True
+        print(f"⚠️ Using Gemini model: {models[0]}")
 except Exception as e:
-    ml["error"] = str(e)
-    print("❌ ML error:", e)
+    print("❌ Gemini disabled:", e)
 
-# ------------------------------------
-# SCHEMAS
-# ------------------------------------
-class StudentInput(BaseModel):
+# ================= ML LOAD =================
+MODEL = None
+SCALER = None
+
+try:
+    MODEL = joblib.load("model.pkl")
+    SCALER = joblib.load("scaler.pkl")
+    print("✅ ML artifacts loaded successfully")
+except Exception as e:
+    print("❌ ML load error:", e)
+
+# ================= SCHEMAS =================
+class PredictInput(BaseModel):
+    math: float
+    reading: float
+    writing: float
+    hours_per_day: float
     attendance: float
-    study_hours: float
-    previous_score: float
-    sleep_hours: float
-    stress_level: float
+    assignment: float
+    internal1: float
+    internal2: float
 
 class TutorInput(BaseModel):
     message: str
 
 class TestInput(BaseModel):
-    subject: str
+    test_type: str
     difficulty: str
+    learning_context: str | None = ""
 
-# ------------------------------------
-# ROOT
-# ------------------------------------
+# ================= HELPERS =================
+def clamp(value, low=0, high=100):
+    try:
+        value = float(value)
+        return max(low, min(high, value))
+    except:
+        return low
+
+# ================= ROUTES =================
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    return {"status": "AI Brain Online 🧠"}
 
-# ------------------------------------
-# PREDICTION (NO NaN EVER)
-# ------------------------------------
 @app.post("/predict")
-def predict(data: StudentInput):
-    if "error" in ml:
-        return {"error": "ML unavailable"}
+def predict(data: PredictInput):
+    if MODEL is None or SCALER is None:
+        raise HTTPException(status_code=500, detail="ML model not loaded")
 
-    df = pd.DataFrame([data.dict()])
-    df = df.apply(pd.to_numeric, errors="coerce")
+    features = np.array([[
+        data.math,
+        data.reading,
+        data.writing,
+        data.hours_per_day,
+        data.attendance,
+        data.assignment,
+        data.internal1,
+        data.internal2
+    ]])
 
-    df_imputed = ml["imputer"].transform(df)
-    X = pd.DataFrame(df_imputed, columns=ml["X_columns"])
+    features = SCALER.transform(features)
+    prediction = MODEL.predict(features)[0]
 
-    marks = float(ml["regression"].predict(X)[0])
+    predicted_marks = clamp(prediction)
+    chance = clamp(predicted_marks)
 
-    proba = ml["classifier"].predict_proba(X)[0][1]
-    if np.isnan(proba):
-        proba = 0.5
-
-    proba = max(0.0, min(1.0, float(proba)))
-
-    risk = "Low" if proba >= 0.75 else "Medium" if proba >= 0.5 else "High"
+    if predicted_marks < 40:
+        risk = "High"
+    elif predicted_marks < 70:
+        risk = "Medium"
+    else:
+        risk = "Low"
 
     return {
-        "marks": round(marks, 2),
-        "chance": round(proba * 100, 2),
-        "risk": risk,
+        "predicted_marks": round(predicted_marks, 2),
+        "chance": round(chance, 2),
+        "risk_level": risk,
+        "math_score": data.math,
+        "reading_score": data.reading,
+        "writing_score": data.writing
     }
 
-# ------------------------------------
-# AI TUTOR (NEVER UNAVAILABLE)
-# ------------------------------------
 @app.post("/chat_with_tutor")
-def chat_tutor(data: TutorInput):
-    if not gemini_model:
-        return {
-            "reply": "I am here to help! Tell me what topic you are studying."
-        }
-
-    prompt = f"""
-You are a friendly AI tutor for students.
-Explain clearly and briefly.
-
-Student question:
-{data.message}
-"""
+def chat_with_tutor(data: TutorInput):
+    if not GEMINI_ENABLED:
+        return {"reply": "Tutor is unavailable right now 😴"}
 
     try:
-        response = gemini_model.generate_content(prompt)
+        prompt = f"You are a friendly AI tutor. Answer clearly and simply:\n{data.message}"
+        response = GEMINI_MODEL.generate_content(prompt)
         return {"reply": response.text}
-
     except Exception:
-        return {
-            "reply": "Let's continue learning! Ask your question again."
-        }
+        return {"reply": "Tutor is unavailable right now 😴"}
 
-# ------------------------------------
-# QUESTION GENERATION (SAFE)
-# ------------------------------------
 @app.post("/generate_full_test")
 def generate_test(data: TestInput):
-    if not gemini_model:
-        return {
-            "questions": [
-                f"Explain basics of {data.subject}",
-                f"Give an example problem from {data.subject}",
-            ]
-        }
-
-    prompt = f"""
-Generate 5 {data.difficulty} level questions for subject {data.subject}.
-Only list questions.
-"""
+    if not GEMINI_ENABLED:
+        return {"questions": []}
 
     try:
-        response = gemini_model.generate_content(prompt)
-        questions = [
-            q.strip("- ").strip()
-            for q in response.text.split("\n")
-            if q.strip()
-        ]
+        prompt = f"""
+Generate 5 multiple-choice questions.
+
+Subject: {data.test_type}
+Difficulty: {data.difficulty}
+Context: {data.learning_context}
+
+Return ONLY valid JSON like:
+[
+  {{
+    "question": "",
+    "options": ["A","B","C","D"],
+    "correct_answer": "A"
+  }}
+]
+"""
+        response = GEMINI_MODEL.generate_content(prompt)
+        text = response.text.strip()
+
+        json_start = text.find("[")
+        questions = json.loads(text[json_start:])
 
         return {"questions": questions}
-
     except Exception:
-        return {
-            "questions": [
-                f"What is {data.subject}?",
-                f"Explain core concepts of {data.subject}",
-            ]
-        }
+        return {"questions": []}
