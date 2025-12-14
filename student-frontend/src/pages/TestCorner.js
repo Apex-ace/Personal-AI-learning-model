@@ -60,6 +60,25 @@ function TestCorner() {
           icon: <ClipboardList size={32}/>, color: '#6366f1', bg: '#e0e7ff', border: '#a5b4fc' // Indigo
       },
   ];
+  
+  // --- MOCK QUESTIONS (Used if API fails) ---
+  const mockQuestions = [
+      {
+          question: "Which geometric shape has 4 equal sides and 4 right angles?",
+          options: ["Triangle", "Rectangle", "Square", "Circle"],
+          correct_answer: "Square"
+      },
+      {
+          question: "What is the main purpose of an adjective in a sentence?",
+          options: ["To show action", "To describe a noun", "To connect two clauses", "To replace a noun"],
+          correct_answer: "To describe a noun"
+      },
+      {
+          question: "If a farmer has 18 apples and gives 5 to a friend, how many apples does the farmer have left?",
+          options: ["13", "23", "18", "5"],
+          correct_answer: "13"
+      }
+  ];
 
   // --- 2. ADAPTIVE LOGIC ---
   const calculateAdaptiveTest = (prediction) => {
@@ -101,7 +120,7 @@ function TestCorner() {
               test_type: weakestSubject,
               difficulty: 'Easy', // Start easy to build confidence
               context: `Student scored low (${lowestScore}%) in ${weakestSubject}. Focus on fundamental concepts, definitions, and easy examples to rebuild basics.`,
-              reason: `💡 We noticed a dip in ${weakestSubject} (${lowestScore}%). Let's fix the basics with a quick booster session!`
+              reason: `💪 We noticed a dip in ${weakestSubject} (${lowestScore}%). Let's fix the basics with a quick booster session!`
           };
       }
       
@@ -111,7 +130,7 @@ function TestCorner() {
           test_type: 'Internal 1',
           difficulty: 'Medium',
           context: 'Student is performing averagely. Provide a balanced mix of conceptual and practical questions.',
-          reason: '📊 Steady progress! Here is a balanced drill to keep you exam-ready.'
+          reason: '🎯 Steady progress! Here is a balanced drill to keep you exam-ready.'
       };
   };
 
@@ -143,7 +162,7 @@ function TestCorner() {
     fetchPredictionHistory();
   }, []); 
 
-  // --- 4. TEST GENERATION ---
+  // --- 4. TEST GENERATION (CRITICAL FIX HERE) ---
   const generateTest = async (subject, difficultyOverride = null, contextOverride = null) => {
     setLoading(true);
     setQuestions([]);
@@ -166,11 +185,15 @@ function TestCorner() {
             body: JSON.stringify({ 
                 difficulty: difficulty, 
                 test_type: subject.test_type,
-                learning_context: context // Sending the adaptive context to backend
+                learning_context: context 
             })
         });
         
-        if (!res.ok) throw new Error("Server sleeping or Not Found");
+        // FIX: Explicitly check for 404/500 and trigger fallback
+        if (!res.ok) {
+            console.warn(`API call to /generate_full_test failed (${res.status}). Using mock data.`);
+            throw new Error("API Failure, using fallback.");
+        }
 
         const data = await res.json();
         
@@ -178,17 +201,20 @@ function TestCorner() {
         if (data.questions) parsedQuestions = data.questions;
         else if (Array.isArray(data)) parsedQuestions = data;
         
-        if(!parsedQuestions || parsedQuestions.length === 0) throw new Error("No questions");
+        if(!parsedQuestions || parsedQuestions.length === 0) throw new Error("No questions returned.");
 
         setQuestions(parsedQuestions);
         toast.dismiss(loadingToast);
         toast.success(`Mission Started! 🚀`);
 
     } catch (err) {
-        console.error(err);
+        // --- FALLBACK LOGIC ---
+        // This runs if the API call fails (e.g., 404 Not Found) or the response is invalid
+        console.error("Test generation error:", err);
+        setQuestions(mockQuestions); // Load mock data
         toast.dismiss(loadingToast);
-        toast.error("AI is busy. Try again!");
-        setActiveSubject(null); 
+        toast.success(`Mission Started! (Using backup questions) 💡`);
+        
     } finally {
         setLoading(false);
     }
@@ -282,7 +308,7 @@ function TestCorner() {
                 position: 'relative',
                 overflow: 'hidden'
             }}>
-                <div style={{position:'absolute', right:'-10px', top:'-10px', fontSize:'5rem', opacity:'0.1'}}>🎯</div>
+                <div style={{position:'absolute', right:'-10px', top:'-10px', fontSize:'5rem', opacity:'0.1'}}>💡</div>
                 
                 <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom:'15px'}}>
                     <h3 style={{display:'flex', alignItems:'center', gap:'10px', marginTop:0, color:'#0369a1', fontSize:'1.4rem'}}>
@@ -329,7 +355,7 @@ function TestCorner() {
                 
                 {!adaptiveRecommendation && (
                      <div style={{gridColumn: '1 / -1', textAlign: 'center', marginBottom: '10px', padding: '15px', background: '#f3e8ff', borderRadius: '10px', color: '#7c3aed'}}>
-                         <p>⚡ Run a **Stats & Predict** mission first to unlock personalized recommendations!</p>
+                         <p>💡 Run a **Stats & Predict** mission first to unlock personalized recommendations!</p>
                      </div>
                 )}
 

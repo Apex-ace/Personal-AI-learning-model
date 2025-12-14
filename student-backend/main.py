@@ -142,14 +142,15 @@ def prepare_input_dataframe(data: Dict, artifacts):
     df_encoded = pd.get_dummies(input_df[cat_feats], drop_first=True)
     input_df = input_df.drop(columns=cat_feats, errors='ignore')
 
-    # Handle Numeric
+    # Handle Numeric (FIXED: Set missing to np.nan for imputation)
     for col in num_feats:
         if col not in input_df.columns:
-            input_df[col] = 0.0
-    input_df = input_df[num_feats]
+            input_df[col] = np.nan 
+            
+    # Filter numeric features to align
+    input_df = input_df.filter(num_feats)
 
     # Align
-    # --- TYPO FIXED BELOW (num_feats instead of num_features) ---
     X_input = pd.concat([
         input_df.reset_index(drop=True),
         df_encoded.reindex(columns=full_cols.difference(num_feats), fill_value=0)
@@ -169,16 +170,18 @@ def predict(student_data: StudentInput):
         data = student_data.model_dump(by_alias=True)
         X_input = prepare_input_dataframe(data, ml_artifacts)
         
-        # Predict Marks
-        final_marks = ml_artifacts['regression_model'].predict(X_input)[0]
+        # FIX: Impute X_input once for both models
+        X_imputed = ml_artifacts['imputer'].transform(X_input)
+        
+        # Predict Marks (FIXED: Use imputed data)
+        final_marks = ml_artifacts['regression_model'].predict(X_imputed)[0] 
 
         # Predict Pass/Fail
-        X_imputed = ml_artifacts['imputer'].transform(X_input)
         pass_proba = ml_artifacts['classification_model'].predict_proba(X_imputed)[0, 1]
         fail_proba = ml_artifacts['classification_model'].predict_proba(X_imputed)[0, 0]
         pass_pred = int(pass_proba >= 0.5)
 
-        # CALCULATE RISK LEVEL (FIXED: Added this logic)
+        # CALCULATE RISK LEVEL
         if fail_proba > 0.6: risk = 'High'
         elif fail_proba > 0.3: risk = 'Medium'
         else: risk = 'Low'
@@ -188,7 +191,7 @@ def predict(student_data: StudentInput):
             "final_pass_prediction": pass_pred,
             "final_pass_probability": round(pass_proba, 4),
             "final_fail_probability": round(fail_proba, 4),
-            "risk_level": risk, # <-- RISK LEVEL INCLUDED
+            "risk_level": risk, 
         }
     except Exception as e:
         traceback.print_exc()

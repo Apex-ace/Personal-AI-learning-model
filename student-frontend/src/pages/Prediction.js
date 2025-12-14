@@ -34,6 +34,7 @@ function Prediction() {
     e.preventDefault();
     setLoading(true);
     const payload = {};
+    // Ensure all inputs are parsed as floats (or 0 if empty)
     Object.keys(formData).forEach(k => payload[k] = parseFloat(formData[k]) || 0);
 
     try {
@@ -50,6 +51,7 @@ function Prediction() {
         // FIX: Combine prediction data with input scores needed for TestCorner adaptive logic
         const finalPredictionData = {
             ...data,
+            // Include the original scores from the form for TestCorner.js logic
             math_score: payload["math score"] || 0,
             reading_score: payload["reading score"] || 0,
             writing_score: payload["writing score"] || 0,
