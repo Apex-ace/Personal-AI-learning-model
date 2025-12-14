@@ -125,7 +125,7 @@ function Prediction() {
                 border: '1px solid #e2e8f0'
             }}>
                 <h3 style={{marginTop: 0, color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginBottom: '15px'}}>
-                    統 Student Metrics
+                    Student Metrics
                 </h3>
                 
                 <form onSubmit={handleAnalyze}>
@@ -166,7 +166,7 @@ function Prediction() {
                         marginTop: '20px', width: '100%', padding: '12px', fontSize: '1rem',
                         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
                     }}>
-                        {loading ? "Calculating..." : "醗 Predict Score"}
+                        {loading ? "Calculating..." : "Predict Score"}
                     </button>
                 </form>
             </div>
