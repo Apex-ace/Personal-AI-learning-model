@@ -8,9 +8,19 @@ import pandas as pd
 import numpy as np
 import traceback
 import json 
-from google import genai 
-# Note: Ensure you have your GEMINI_API_KEY set up in your environment for Render
-ACTIVE_MODEL_NAME = "gemini-2.5-flash" 
+# CRITICAL FIX: Corrected the import path that caused the ImportError
+from google_generativeai import genai 
+
+# ----------------------------------------------------------------------
+# DYNAMIC MODEL SELECTION STRATEGY
+# ----------------------------------------------------------------------
+# 1. Use the faster model for real-time interaction (Chat, quick evaluations)
+CHAT_MODEL_NAME = "gemini-2.5-flash"       
+
+# 2. Use the highest capability model for complex, structured, and deep reasoning tasks
+TEST_GENERATION_MODEL_NAME = "gemini-2.5-pro" 
+# ----------------------------------------------------------------------
+
 
 # --- 1. Global State & Lifespan ---
 ml_artifacts = {}
@@ -262,14 +272,15 @@ def recommend(student_data: StudentInput):
         raise HTTPException(500, str(e))
 
 
-# --- 6. Endpoints (AI Chatbot and Test Generation - LIVE) ---
+# --- 6. Endpoints (AI Chatbot and Test Generation - Using Model Selection) ---
 
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(request: ChatRequest):
-    print(f"📩 Chat using model: {ACTIVE_MODEL_NAME}")
+    print(f"📩 Chat using model: {CHAT_MODEL_NAME}")
     prompt = f"Act as a funny tutor for a {request.grade_level}th grader. Use emojis 🌟. Keep it short. Question: {request.message}"
     try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        # Use the faster model for chat
+        model = genai.GenerativeModel(CHAT_MODEL_NAME) 
         response = model.generate_content(prompt)
         return {"reply": response.text}
     except Exception as e:
@@ -280,7 +291,7 @@ async def chat_with_tutor(request: ChatRequest):
 
 @app.post("/generate_full_test")
 async def generate_full_test(req: TestRequest):
-    print(f"📝 Generating {req.difficulty} test for: {req.test_type}")
+    print(f"📝 Generating {req.difficulty} test using model: {TEST_GENERATION_MODEL_NAME}")
     
     # Logic for Marks & Questions count
     if req.test_type == "Assignment":
@@ -312,7 +323,8 @@ async def generate_full_test(req: TestRequest):
     }}
     """
     try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        # Use the most capable model for complex structured output
+        model = genai.GenerativeModel(TEST_GENERATION_MODEL_NAME)
         response = model.generate_content(prompt)
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(cleaned_text)
@@ -323,6 +335,8 @@ async def generate_full_test(req: TestRequest):
 
 @app.post("/analyze_test_results")
 async def analyze_test_results(res: TestResult):
+    # Use the fastest model for quick feedback
+    model_name = CHAT_MODEL_NAME
     prompt = f"""
     Student scored {res.score}/{res.total_marks}.
     Weak areas: {', '.join(res.wrong_answers[:5])}.
@@ -330,7 +344,7 @@ async def analyze_test_results(res: TestResult):
     Respond in JSON: {{ "feedback": "...", "recommendation": "..." }}
     """
     try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(cleaned_text)
@@ -339,10 +353,12 @@ async def analyze_test_results(res: TestResult):
 
 @app.post("/generate_study_plan")
 async def generate_study_plan(student_data: StudentInput):
+    # Use the strongest model for complex analysis
+    model_name = TEST_GENERATION_MODEL_NAME
     data = student_data.model_dump(by_alias=True)
     prompt = f"Analyze: Math:{data['math score']}, Reading:{data['reading score']}. Return JSON: {{ 'analysis': '...', 'youtube_queries': ['...'], 'quiz': [] }}"
     try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         cleaned_text = response.text.replace("```json", "").replace("```", "")
         return json.loads(cleaned_text)
@@ -351,9 +367,11 @@ async def generate_study_plan(student_data: StudentInput):
 
 @app.post("/evaluate_answer")
 async def evaluate_answer(submission: QuizSubmission):
+    # Use the fastest model for real-time evaluation
+    model_name = CHAT_MODEL_NAME
     prompt = f"Question: {submission.question} Answer: {submission.student_answer}. Correct? Explain."
     try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         return {"feedback": response.text}
     except Exception as e:
