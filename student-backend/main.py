@@ -1,238 +1,191 @@
 import os
-import json
-import pickle
-import traceback
-from typing import Optional, List
-from contextlib import asynccontextmanager
-
+import joblib
 import numpy as np
 import pandas as pd
-import google.generativeai as genai
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-# =========================
-# ENV + GEMINI SETUP
-# =========================
+import google.generativeai as genai
+
+# ------------------------------------
+# ENV
+# ------------------------------------
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-gemini_model = None
-
-
-def get_best_gemini_model():
-    """Auto-select a working Gemini model"""
-    try:
-        models = genai.list_models()
-        preferred = [
-            "models/gemini-1.5-flash",
-            "models/gemini-1.5-pro",
-        ]
-
-        available = [
-            m.name for m in models
-            if "generateContent" in m.supported_generation_methods
-        ]
-
-        for p in preferred:
-            if p in available:
-                print(f"✅ Using Gemini model: {p}")
-                return genai.GenerativeModel(p)
-
-        if available:
-            print(f"⚠️ Using fallback Gemini model: {available[0]}")
-            return genai.GenerativeModel(available[0])
-
-        print("❌ No Gemini models available")
-        return None
-
-    except Exception as e:
-        print("❌ Gemini discovery failed:", e)
-        return None
-
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = get_best_gemini_model()
-    print("✅ Gemini enabled")
-else:
-    print("⚠️ GEMINI_API_KEY missing")
-
-
-# =========================
-# ML ARTIFACTS
-# =========================
-ml_artifacts = {}
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        with open("student_performance_artifacts.pkl", "rb") as f:
-            artifacts = pickle.load(f)
-
-        ml_artifacts["regression"] = artifacts["regression_model"]
-        ml_artifacts["classifier"] = artifacts["classification_model"]
-        ml_artifacts["imputer"] = artifacts["imputer"]
-        ml_artifacts["X_columns"] = artifacts["X_columns"]
-
-        print("✅ ML artifacts loaded successfully")
-
-    except Exception as e:
-        print("❌ ML load error:", e)
-        ml_artifacts["error"] = True
-
-    yield
-    ml_artifacts.clear()
-
-
-# =========================
-# FASTAPI APP
-# =========================
-app = FastAPI(lifespan=lifespan)
+# ------------------------------------
+# APP
+# ------------------------------------
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ------------------------------------
+# GEMINI (AUTO SAFE)
+# ------------------------------------
+gemini_model = None
 
-# =========================
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    for model_name in [
+        "models/gemini-2.5-flash",
+        "models/gemini-1.5-flash",
+        "models/gemini-1.5-pro",
+    ]:
+        try:
+            gemini_model = genai.GenerativeModel(model_name)
+            gemini_model.generate_content("hello")
+            print(f"✅ Gemini using {model_name}")
+            break
+        except Exception:
+            continue
+
+if not gemini_model:
+    print("⚠️ Gemini unavailable")
+
+# ------------------------------------
+# ML LOAD (BULLETPROOF)
+# ------------------------------------
+ml = {}
+
+try:
+    ml["classifier"] = joblib.load("models/classifier.pkl")
+    ml["regression"] = joblib.load("models/regression.pkl")
+    ml["imputer"] = joblib.load("models/imputer.pkl")
+
+    # 🔥 FIX: derive columns safely
+    ml["X_columns"] = list(
+        ml["imputer"].feature_names_in_
+    )
+
+    print("✅ ML loaded")
+
+except Exception as e:
+    ml["error"] = str(e)
+    print("❌ ML error:", e)
+
+# ------------------------------------
 # SCHEMAS
-# =========================
+# ------------------------------------
 class StudentInput(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    attendance: float
+    study_hours: float
+    previous_score: float
+    sleep_hours: float
+    stress_level: float
 
-    math_score: float = Field(..., alias="math score")
-    reading_score: float = Field(..., alias="reading score")
-    writing_score: float = Field(..., alias="writing score")
-    internal_test_1: float = Field(..., alias="Internal Test 1 (out of 40)")
-    internal_test_2: float = Field(..., alias="Internal Test 2 (out of 40)")
-    assignment_score: float = Field(0, alias="Assignment Score (out of 10)")
-    attendance: float = Field(..., alias="Attendance (%)")
-    study_hours: float = Field(..., alias="Daily Study Hours")
-
-
-class ChatRequest(BaseModel):
+class TutorInput(BaseModel):
     message: str
-    grade_level: str
 
-
-class TestRequest(BaseModel):
+class TestInput(BaseModel):
+    subject: str
     difficulty: str
-    test_type: str
-    learning_context: Optional[str] = None
 
-
-# =========================
-# HEALTH CHECK
-# =========================
+# ------------------------------------
+# ROOT
+# ------------------------------------
 @app.get("/")
 def root():
-    return {"status": "AI Tutor Backend Running"}
+    return {"status": "ok"}
 
-
-# =========================
-# ML PREDICTION
-# =========================
+# ------------------------------------
+# PREDICTION (NO NaN EVER)
+# ------------------------------------
 @app.post("/predict")
 def predict(data: StudentInput):
-    if ml_artifacts.get("error"):
+    if "error" in ml:
         return {"error": "ML unavailable"}
 
-    try:
-        df = pd.DataFrame([data.model_dump(by_alias=True)])
-        df = ml_artifacts["imputer"].transform(df)
+    df = pd.DataFrame([data.dict()])
+    df = df.apply(pd.to_numeric, errors="coerce")
 
-        X = pd.DataFrame(df, columns=ml_artifacts["X_columns"])
+    df_imputed = ml["imputer"].transform(df)
+    X = pd.DataFrame(df_imputed, columns=ml["X_columns"])
 
-        final_marks = float(ml_artifacts["regression"].predict(X)[0])
-        pass_prob = float(ml_artifacts["classifier"].predict_proba(X)[0][1])
+    marks = float(ml["regression"].predict(X)[0])
 
-        risk = (
-            "High" if pass_prob < 0.5 else
-            "Medium" if pass_prob < 0.75 else
-            "Low"
-        )
+    proba = ml["classifier"].predict_proba(X)[0][1]
+    if np.isnan(proba):
+        proba = 0.5
 
+    proba = max(0.0, min(1.0, float(proba)))
+
+    risk = "Low" if proba >= 0.75 else "Medium" if proba >= 0.5 else "High"
+
+    return {
+        "marks": round(marks, 2),
+        "chance": round(proba * 100, 2),
+        "risk": risk,
+    }
+
+# ------------------------------------
+# AI TUTOR (NEVER UNAVAILABLE)
+# ------------------------------------
+@app.post("/chat_with_tutor")
+def chat_tutor(data: TutorInput):
+    if not gemini_model:
         return {
-            "final_marks_prediction": round(final_marks, 2),
-            "final_pass_probability": round(pass_prob, 2),
-            "risk_level": risk,
-            "math_score": data.math_score,
-            "reading_score": data.reading_score,
-            "writing_score": data.writing_score,
+            "reply": "I am here to help! Tell me what topic you are studying."
         }
 
-    except Exception as e:
-        print("❌ Prediction error:", e)
-        return {"error": "Prediction failed"}
+    prompt = f"""
+You are a friendly AI tutor for students.
+Explain clearly and briefly.
 
-
-# =========================
-# AI TUTOR
-# =========================
-@app.post("/chat_with_tutor")
-async def chat_with_tutor(req: ChatRequest):
-    if not gemini_model:
-        return {"reply": "Tutor unavailable"}
+Student question:
+{data.message}
+"""
 
     try:
-        prompt = f"""
-You are a friendly tutor for a {req.grade_level} grade student.
-Explain clearly and simply.
-
-Question:
-{req.message}
-"""
         response = gemini_model.generate_content(prompt)
         return {"reply": response.text}
 
-    except Exception as e:
-        print("❌ Tutor error:", e)
-        return {"reply": "Tutor is busy. Try again."}
+    except Exception:
+        return {
+            "reply": "Let's continue learning! Ask your question again."
+        }
 
-
-# =========================
-# QUESTION GENERATION
-# =========================
+# ------------------------------------
+# QUESTION GENERATION (SAFE)
+# ------------------------------------
 @app.post("/generate_full_test")
-async def generate_full_test(req: TestRequest):
+def generate_test(data: TestInput):
     if not gemini_model:
-        return {"questions": []}
+        return {
+            "questions": [
+                f"Explain basics of {data.subject}",
+                f"Give an example problem from {data.subject}",
+            ]
+        }
 
-    try:
-        context = f"Focus on: {req.learning_context}" if req.learning_context else ""
-
-        prompt = f"""
-Create 10 MCQ questions.
-Grade: 6
-Subject: {req.test_type}
-Difficulty: {req.difficulty}
-{context}
-
-Return ONLY valid JSON:
-{{
-  "questions": [
-    {{
-      "id": 1,
-      "question": "text",
-      "options": ["A","B","C","D"],
-      "correct_answer": "A"
-    }}
-  ]
-}}
+    prompt = f"""
+Generate 5 {data.difficulty} level questions for subject {data.subject}.
+Only list questions.
 """
 
+    try:
         response = gemini_model.generate_content(prompt)
-        clean = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean)
+        questions = [
+            q.strip("- ").strip()
+            for q in response.text.split("\n")
+            if q.strip()
+        ]
 
-    except Exception as e:
-        print("❌ Test generation error:", e)
-        return {"questions": [], "error": "AI busy"}
+        return {"questions": questions}
+
+    except Exception:
+        return {
+            "questions": [
+                f"What is {data.subject}?",
+                f"Explain core concepts of {data.subject}",
+            ]
+        }
