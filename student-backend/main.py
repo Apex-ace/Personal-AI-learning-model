@@ -2,11 +2,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import pickle
 import pandas as pd
 import numpy as np
 import traceback
+import json 
+from google import genai 
+# Note: Ensure you have your GEMINI_API_KEY set up in your environment for Render
+ACTIVE_MODEL_NAME = "gemini-2.5-flash" 
 
 # --- 1. Global State & Lifespan ---
 ml_artifacts = {}
@@ -77,7 +81,26 @@ class StudentInput(BaseModel):
         populate_by_name = True
         extra = "allow"
 
-# --- 4. Helper Logic ---
+# Models for NEW Endpoints
+class ChatRequest(BaseModel):
+    message: str
+    grade_level: str
+
+class TestRequest(BaseModel):
+    difficulty: str
+    test_type: str
+    learning_context: str
+
+class TestResult(BaseModel):
+    score: int
+    total_marks: int
+    wrong_answers: List[str]
+
+class QuizSubmission(BaseModel):
+    question: str
+    student_answer: str
+
+# --- 4. Helper Logic (Unchanged) ---
 def compute_skill_flags(row):
     def g(key): return row.get(key, np.nan)
     
@@ -158,7 +181,8 @@ def prepare_input_dataframe(data: Dict, artifacts):
     
     return X_input[full_cols]
 
-# --- 5. Endpoints ---
+
+# --- 5. Endpoints (ML Model Prediction) ---
 @app.get("/")
 def home():
     return {"message": "API is running", "docs": "http://127.0.0.1:8000/docs"}
@@ -170,10 +194,11 @@ def predict(student_data: StudentInput):
         data = student_data.model_dump(by_alias=True)
         X_input = prepare_input_dataframe(data, ml_artifacts)
         
-        # FIX: Impute X_input once for both models
-        X_imputed = ml_artifacts['imputer'].transform(X_input)
+        # FIX: Impute X_input and convert the result back to a DataFrame 
+        X_imputed_array = ml_artifacts['imputer'].transform(X_input)
+        X_imputed = pd.DataFrame(X_imputed_array, columns=X_input.columns)
         
-        # Predict Marks (FIXED: Use imputed data)
+        # Predict Marks
         final_marks = ml_artifacts['regression_model'].predict(X_imputed)[0] 
 
         # Predict Pass/Fail
@@ -210,7 +235,11 @@ def recommend(student_data: StudentInput):
 
         # Get Risk Level
         X_input = prepare_input_dataframe(data, ml_artifacts)
-        X_imputed = ml_artifacts['imputer'].transform(X_input)
+        
+        # FIX: Impute X_input and convert the result back to a DataFrame
+        X_imputed_array = ml_artifacts['imputer'].transform(X_input)
+        X_imputed = pd.DataFrame(X_imputed_array, columns=X_input.columns)
+        
         fail_prob = ml_artifacts['classification_model'].predict_proba(X_imputed)[0, 0]
 
         if fail_prob > 0.6: risk = 'High'
@@ -231,3 +260,101 @@ def recommend(student_data: StudentInput):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, str(e))
+
+
+# --- 6. Endpoints (AI Chatbot and Test Generation - LIVE) ---
+
+@app.post("/chat_with_tutor")
+async def chat_with_tutor(request: ChatRequest):
+    print(f"📩 Chat using model: {ACTIVE_MODEL_NAME}")
+    prompt = f"Act as a funny tutor for a {request.grade_level}th grader. Use emojis 🌟. Keep it short. Question: {request.message}"
+    try:
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        response = model.generate_content(prompt)
+        return {"reply": response.text}
+    except Exception as e:
+        print("❌ GEMINI ERROR:")
+        traceback.print_exc()
+        # Graceful error response for the frontend
+        return {"reply": f"Sorry, my AI circuit is down. Error: {str(e)}"}
+
+@app.post("/generate_full_test")
+async def generate_full_test(req: TestRequest):
+    print(f"📝 Generating {req.difficulty} test for: {req.test_type}")
+    
+    # Logic for Marks & Questions count
+    if req.test_type == "Assignment":
+        count = 10 
+        subject_prompt = "Mix of critical thinking and problem solving."
+    elif "Internal" in req.test_type:
+        count = 20
+        subject_prompt = "Mixed subjects: Math (8 questions), Reading (6 questions), Writing (6 questions)."
+    else:
+        count = 20
+        subject_prompt = f"Strictly 100% {req.test_type} questions."
+
+    prompt = f"""
+    Create a {count}-question multiple-choice test for a 5th/6th grader.
+    Subject Focus: {subject_prompt}
+    Difficulty: {req.difficulty}.
+    
+    Respond ONLY in this JSON format:
+    {{
+        "questions": [
+            {{
+                "id": 1,
+                "subject": "{req.test_type}",
+                "question": "Question text...",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "Option A"
+            }}
+        ]
+    }}
+    """
+    try:
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        response = model.generate_content(prompt)
+        cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned_text)
+    except Exception as e:
+        traceback.print_exc()
+        # Graceful error response for the frontend
+        return {"questions": []}
+
+@app.post("/analyze_test_results")
+async def analyze_test_results(res: TestResult):
+    prompt = f"""
+    Student scored {res.score}/{res.total_marks}.
+    Weak areas: {', '.join(res.wrong_answers[:5])}.
+    Provide: 1. Short feedback. 2. Specific recommendation.
+    Respond in JSON: {{ "feedback": "...", "recommendation": "..." }}
+    """
+    try:
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        response = model.generate_content(prompt)
+        cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned_text)
+    except Exception as e:
+        return {"feedback": "Good effort!", "recommendation": "Review your mistakes."}
+
+@app.post("/generate_study_plan")
+async def generate_study_plan(student_data: StudentInput):
+    data = student_data.model_dump(by_alias=True)
+    prompt = f"Analyze: Math:{data['math score']}, Reading:{data['reading score']}. Return JSON: {{ 'analysis': '...', 'youtube_queries': ['...'], 'quiz': [] }}"
+    try:
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        response = model.generate_content(prompt)
+        cleaned_text = response.text.replace("```json", "").replace("```", "")
+        return json.loads(cleaned_text)
+    except Exception as e:
+        return {}
+
+@app.post("/evaluate_answer")
+async def evaluate_answer(submission: QuizSubmission):
+    prompt = f"Question: {submission.question} Answer: {submission.student_answer}. Correct? Explain."
+    try:
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        response = model.generate_content(prompt)
+        return {"feedback": response.text}
+    except Exception as e:
+        return {"feedback": "Error evaluating answer."}

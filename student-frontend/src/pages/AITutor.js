@@ -1,3 +1,5 @@
+// AITutor.js
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Trash2, Sparkles } from 'lucide-react'; 
 import { API_BASE_URL } from '../config';
@@ -9,8 +11,8 @@ function AITutor() {
     const savedMessages = localStorage.getItem('ai_tutor_chat');
     return savedMessages ? JSON.parse(savedMessages) : [
       { 
-        role: 'assistant', 
-        content: "Hi there! 🦁 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! ✏️" 
+        content: "Hi there! 🦁 I'm your AI Study Buddy! Ask me anything about Math, Science, or History and I'll explain it simply! ✏️",
+        role: 'assistant'
       }
     ];
   });
@@ -38,32 +40,27 @@ function AITutor() {
     setLoading(true);
 
     try {
-        // FIX: The original /chat_with_tutor endpoint is missing. 
-        // We'll replace it with a placeholder response to un-stuck the chat.
-        // If you define the /chat_with_tutor endpoint in main.py, you can restore the original code.
-
-        // MOCK RESPONSE TO AVOID API ERROR
-        await new Promise(resolve => setTimeout(resolve, 800)); // Simulate network latency
-        
-        const mockResponse = {
-            reply: `I received your question about "${input}". The AI Tutor server is currently unavailable. Please check the backend connection or try asking a question directly to the developer for now! 💻`
-        };
-        
-        setMessages(prev => [...prev, { role: 'assistant', content: mockResponse.reply }]);
-        
-        // Original (currently broken) API call:
-        /*
+        // --- LIVE API CALL RESTORED ---
         const response = await fetch(`${API_BASE_URL}/chat_with_tutor`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: input, grade_level: "5" })
+            body: JSON.stringify({ 
+                message: userMsg.content, 
+                // Assuming grade level is fixed or fetched elsewhere; using "5" for demo
+                grade_level: "5" 
+            })
         });
         const data = await response.json();
-        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
-        */
 
+        if (data.reply && data.reply.startsWith("Sorry, my AI circuit is down")) {
+            throw new Error(data.reply);
+        }
+        
+        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+        
     } catch (e) {
-        setMessages(prev => [...prev, { role: 'assistant', content: "Oops! My brain froze. 🧊 Try asking again!" }]);
+        // Fallback for API errors (e.g., key failed, network issue)
+        setMessages(prev => [...prev, { role: 'assistant', content: "Oops! My AI tutor connection is struggling. Try again, or ask a simpler question. 🧊" }]);
     } finally {
         setLoading(false);
     }
@@ -100,13 +97,9 @@ function AITutor() {
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                    background: '#fff', 
-                    padding: '5px', 
-                    borderRadius: '50%',
-                    border: '2px solid #FFA500',
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
+                    width: '32px', height: '32px', borderRadius: '50%', 
+                    background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px solid #FFA500', flexShrink: 0,
                     boxShadow: '0 2px 0 #FFC107'
                 }}>
                     <Bot size={24} color="#FFA500"/>
@@ -115,7 +108,7 @@ function AITutor() {
                     <h1 style={{
                         margin: 0, 
                         fontSize: '1.1rem', 
-                        color: '#D97706', // Darker amber for readability
+                        color: '#D97706', 
                         fontWeight: '800',
                         lineHeight: '1',
                         letterSpacing: '0.5px'
@@ -133,12 +126,12 @@ function AITutor() {
             </div>
             
             <button onClick={clearChat} style={{
-                background: '#FFF0F5', // Lavender Blush
+                background: '#FFF0F5', 
                 border: '2px solid #FF69B4', 
                 color: '#FF1493', 
                 width: '36px', 
                 height: '36px',
-                borderRadius: '12px', // Softer square shape
+                borderRadius: '12px', 
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -152,15 +145,14 @@ function AITutor() {
             </button>
         </header>
 
-        {/* --- CHAT AREA (Simplified Background) --- */}
+        {/* --- CHAT AREA --- */}
         <div style={{
             flex: 1, 
             display: 'flex', 
             flexDirection: 'column', 
             overflow: 'hidden', 
             position: 'relative',
-            background: '#F0F9FF', // Very light blue
-            // Subtle dot pattern instead of lines for cleaner look
+            background: '#F0F9FF', 
             backgroundImage: 'radial-gradient(#BFDBFE 1.5px, transparent 1.5px)',
             backgroundSize: '20px 20px'
         }}>
@@ -182,18 +174,14 @@ function AITutor() {
                         alignItems: 'flex-end',
                         gap: '8px'
                     }}>
-                        {/* BOT AVATAR */}
-                        {m.role === 'assistant' && (
+                        {/* BOT AVATAR/USER AVATAR */}
+                        {(m.role === 'assistant') ? (
                             <div style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
-                                background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                border: '2px solid #FFA500', flexShrink: 0,
-                                boxShadow: '0 2px 0 #FFA500',
-                                marginBottom: '4px' // Align with bottom of bubble
-                            }}>
-                                <Bot size={18} color="#FFA500"/>
-                            </div>
-                        )}
+                                width: '32px', height: '32px', borderRadius: '50%', background: '#FFF', 
+                                border: '2px solid #FFA500', flexShrink: 0, boxShadow: '0 2px 0 #FFA500',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px'
+                            }}> <Bot size={18} color="#FFA500"/> </div>
+                        ) : null}
 
                         {/* MESSAGE BUBBLE */}
                         <div style={{
@@ -202,31 +190,25 @@ function AITutor() {
                             borderRadius: '18px',
                             borderBottomLeftRadius: m.role === 'assistant' ? '4px' : '18px',
                             borderBottomRightRadius: m.role === 'user' ? '4px' : '18px',
-                            background: m.role === 'user' ? '#38BDF8' : '#FFFFFF', // Brighter Sky Blue
+                            background: m.role === 'user' ? '#38BDF8' : '#FFFFFF', 
                             border: m.role === 'user' ? '2px solid #0EA5E9' : '2px solid #FFA500',
                             color: m.role === 'user' ? '#FFFFFF' : '#333333',
-                            boxShadow: '0 3px 0 rgba(0,0,0,0.1)', // Softer shadow
+                            boxShadow: '0 3px 0 rgba(0,0,0,0.1)', 
                             fontSize: '1rem', 
                             lineHeight: '1.4',
                             fontWeight: '500',
                             wordBreak: 'break-word',
-                            textShadow: m.role === 'user' ? '0 1px 0 rgba(0,0,0,0.1)' : 'none'
                         }}>
                             {m.content}
                         </div>
 
-                        {/* USER AVATAR */}
-                        {m.role === 'user' && (
+                        {(m.role === 'user') ? (
                             <div style={{
-                                width: '32px', height: '32px', borderRadius: '50%', 
-                                background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                border: '2px solid #0EA5E9', flexShrink: 0,
-                                boxShadow: '0 2px 0 #0EA5E9',
-                                marginBottom: '4px'
-                            }}>
-                                <User size={18} color="#0EA5E9"/>
-                            </div>
-                        )}
+                                width: '32px', height: '32px', borderRadius: '50%', background: '#FFF', 
+                                border: '2px solid #0EA5E9', flexShrink: 0, boxShadow: '0 2px 0 #0EA5E9',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px'
+                            }}> <User size={18} color="#0EA5E9"/> </div>
+                        ) : null}
                     </div>
                 ))}
 
@@ -252,10 +234,10 @@ function AITutor() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* INPUT AREA (Floating Card Style) */}
+            {/* INPUT AREA */}
             <div style={{
                 padding: '10px 15px 15px 15px', 
-                background: 'linear-gradient(to bottom, rgba(240,249,255,0), #F0F9FF 20%)', // Fade in background
+                background: 'linear-gradient(to bottom, rgba(240,249,255,0), #F0F9FF 20%)', 
                 display: 'flex', 
                 gap: '10px', 
                 alignItems: 'center'
@@ -304,8 +286,8 @@ function AITutor() {
                     style={{
                         width: '50px', 
                         height: '50px', 
-                        borderRadius: '16px', // Squircle shape
-                        background: input.trim() ? '#22C55E' : '#E2E8F0', // Bright Green
+                        borderRadius: '16px', 
+                        background: input.trim() ? '#22C55E' : '#E2E8F0', 
                         border: 'none',
                         cursor: input.trim() ? 'pointer' : 'default',
                         display: 'flex', 

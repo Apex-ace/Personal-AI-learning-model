@@ -1,3 +1,5 @@
+// TestCorner.js
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase'; 
 import { API_BASE_URL } from '../config'; 
@@ -59,25 +61,6 @@ function TestCorner() {
           test_type: 'Assignment', 
           icon: <ClipboardList size={32}/>, color: '#6366f1', bg: '#e0e7ff', border: '#a5b4fc' // Indigo
       },
-  ];
-  
-  // --- MOCK QUESTIONS (Used if API fails) ---
-  const mockQuestions = [
-      {
-          question: "Which geometric shape has 4 equal sides and 4 right angles?",
-          options: ["Triangle", "Rectangle", "Square", "Circle"],
-          correct_answer: "Square"
-      },
-      {
-          question: "What is the main purpose of an adjective in a sentence?",
-          options: ["To show action", "To describe a noun", "To connect two clauses", "To replace a noun"],
-          correct_answer: "To describe a noun"
-      },
-      {
-          question: "If a farmer has 18 apples and gives 5 to a friend, how many apples does the farmer have left?",
-          options: ["13", "23", "18", "5"],
-          correct_answer: "13"
-      }
   ];
 
   // --- 2. ADAPTIVE LOGIC ---
@@ -162,7 +145,7 @@ function TestCorner() {
     fetchPredictionHistory();
   }, []); 
 
-  // --- 4. TEST GENERATION (CRITICAL FIX HERE) ---
+  // --- 4. TEST GENERATION (RESTORED LIVE API CALL) ---
   const generateTest = async (subject, difficultyOverride = null, contextOverride = null) => {
     setLoading(true);
     setQuestions([]);
@@ -179,6 +162,7 @@ function TestCorner() {
     const loadingToast = toast.loading(`Generating ${subject.name || subject.subjectName}...`);
     
     try {
+        // --- LIVE API CALL RESTORED ---
         const res = await fetch(`${API_BASE_URL}/generate_full_test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -189,10 +173,9 @@ function TestCorner() {
             })
         });
         
-        // FIX: Explicitly check for 404/500 and trigger fallback
         if (!res.ok) {
-            console.warn(`API call to /generate_full_test failed (${res.status}). Using mock data.`);
-            throw new Error("API Failure, using fallback.");
+            const errorText = await res.text();
+            throw new Error(`Server returned status ${res.status}: ${errorText}`);
         }
 
         const data = await res.json();
@@ -201,19 +184,17 @@ function TestCorner() {
         if (data.questions) parsedQuestions = data.questions;
         else if (Array.isArray(data)) parsedQuestions = data;
         
-        if(!parsedQuestions || parsedQuestions.length === 0) throw new Error("No questions returned.");
+        if(!parsedQuestions || parsedQuestions.length === 0) throw new Error("No questions returned by the AI.");
 
         setQuestions(parsedQuestions);
         toast.dismiss(loadingToast);
         toast.success(`Mission Started! 🚀`);
 
     } catch (err) {
-        // --- FALLBACK LOGIC ---
-        // This runs if the API call fails (e.g., 404 Not Found) or the response is invalid
+        // Fallback for API errors
         console.error("Test generation error:", err);
-        setQuestions(mockQuestions); // Load mock data
         toast.dismiss(loadingToast);
-        toast.success(`Mission Started! (Using backup questions) 💡`);
+        toast.error(`Error: Could not generate test questions. Check backend logs.`);
         
     } finally {
         setLoading(false);
