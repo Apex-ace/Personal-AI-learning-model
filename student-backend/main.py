@@ -2,40 +2,42 @@ import os
 import json
 import pickle
 import traceback
-from typing import List, Optional
-
 import pandas as pd
 import numpy as np
-from dotenv import load_dotenv
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 import google.generativeai as genai
+from dotenv import load_dotenv
 
-# =========================
+# =========================================================
 # ENV + GEMINI SETUP
-# =========================
+# =========================================================
+
 load_dotenv()
-
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "models/gemini-1.5-flash"  # ✅ SAFE MODEL
 
-GEMINI_ENABLED = False
+ACTIVE_MODEL_NAME = "models/gemini-1.5-flash"  # ✅ SAFE MODEL
+
 if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        GEMINI_ENABLED = True
-        print("✅ Gemini enabled")
-    except Exception as e:
-        print("❌ Gemini init failed:", e)
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("✅ Gemini enabled")
+else:
+    print("⚠️ Gemini API key missing")
 
-# =========================
-# ML ARTIFACT STORAGE
-# =========================
+# =========================================================
+# GLOBAL ML STORE
+# =========================================================
+
 ml_artifacts = {}
+
+# =========================================================
+# APP LIFESPAN (LOAD ML ON STARTUP)
+# =========================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,9 +50,22 @@ async def lifespan(app: FastAPI):
         ml_artifacts["imputer"] = artifacts["imputer"]
         ml_artifacts["numeric_features"] = artifacts["numeric_features"]
         ml_artifacts["categorical_features"] = artifacts.get("categorical_features", [])
-        ml_artifacts["columns"] = artifacts["X_columns"]
 
-        print("✅ ML artifacts loaded")
+        # 🔥 REBUILD FEATURE COLUMNS SAFELY
+        df = artifacts["df"]
+
+        num = df[ml_artifacts["numeric_features"]]
+        cat = (
+            pd.get_dummies(df[ml_artifacts["categorical_features"]], drop_first=True)
+            if ml_artifacts["categorical_features"]
+            else pd.DataFrame()
+        )
+
+        X_full = pd.concat([num.reset_index(drop=True), cat.reset_index(drop=True)], axis=1)
+        ml_artifacts["columns"] = X_full.columns
+
+        print("✅ ML artifacts loaded successfully")
+
     except Exception as e:
         ml_artifacts["error"] = True
         print("❌ ML load error:", e)
@@ -58,9 +73,10 @@ async def lifespan(app: FastAPI):
     yield
     ml_artifacts.clear()
 
-# =========================
+# =========================================================
 # FASTAPI APP
-# =========================
+# =========================================================
+
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
@@ -70,9 +86,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# SCHEMAS
-# =========================
+# =========================================================
+# DATA MODELS
+# =========================================================
+
 class StudentInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -85,71 +102,67 @@ class StudentInput(BaseModel):
     attendance: float = Field(..., alias="Attendance (%)")
     study_hours: float = Field(..., alias="Daily Study Hours")
 
+
 class ChatRequest(BaseModel):
     message: str
     grade_level: str
+
 
 class TestRequest(BaseModel):
     difficulty: str
     test_type: str
     learning_context: Optional[str] = None
 
+
 class TestResult(BaseModel):
     score: int
     total_marks: int
     wrong_answers: List[str]
 
-# =========================
-# HEALTH CHECK
-# =========================
+# =========================================================
+# ROUTES
+# =========================================================
+
 @app.get("/")
 def root():
-    return {"status": "AI Tutor Backend Running"}
+    return {"status": "AI Learning Backend Running"}
 
-# =========================
-# ML PREDICTION (USED BY FRONTEND)
-# =========================
+# ---------------------------------------------------------
+# ML PREDICTION
+# ---------------------------------------------------------
+
 @app.post("/predict")
 def predict(student: StudentInput):
     if ml_artifacts.get("error"):
-        return {"error": "ML model unavailable"}
+        return {"error": "ML model not loaded"}
 
     try:
         data = student.model_dump(by_alias=True)
         df = pd.DataFrame([data])
 
-        # numeric
-        X_num = df[ml_artifacts["numeric_features"]]
-        X_num = ml_artifacts["imputer"].transform(X_num)
-        X_num = pd.DataFrame(X_num, columns=ml_artifacts["numeric_features"])
+        df = df.rename(columns={
+            "math score": "math_score",
+            "reading score": "reading_score",
+            "writing score": "writing_score",
+            "Attendance (%)": "attendance",
+            "Daily Study Hours": "study_hours",
+        })
 
-        # categorical (safe even if empty)
-        if ml_artifacts["categorical_features"]:
-            df_cat = pd.get_dummies(
-                df[ml_artifacts["categorical_features"]],
-                drop_first=True
-            )
-        else:
-            df_cat = pd.DataFrame()
+        df = df.reindex(columns=ml_artifacts["numeric_features"], fill_value=0)
+        df[ml_artifacts["numeric_features"]] = ml_artifacts["imputer"].transform(df)
 
-        X = pd.concat([X_num, df_cat], axis=1)
+        X = df.reindex(columns=ml_artifacts["columns"], fill_value=0)
 
-        # align columns
-        X = X.reindex(columns=ml_artifacts["columns"], fill_value=0)
-
-        # predictions
         marks = float(ml_artifacts["regression_model"].predict(X)[0])
-        prob = float(ml_artifacts["classification_model"].predict_proba(X)[0][1])
+        pass_prob = float(ml_artifacts["classification_model"].predict_proba(X)[0][1])
 
-        risk = "Low"
-        if prob < 0.6:
-            risk = "High"
-        elif marks < 60:
+        risk = "High" if pass_prob < 0.6 else "Low"
+        if 0.6 <= pass_prob < 0.75:
             risk = "Medium"
 
         return {
             "final_marks_prediction": round(marks, 2),
-            "final_pass_probability": round(prob, 2),
+            "final_pass_probability": round(pass_prob, 2),
             "risk_level": risk,
             "math_score": data["math score"],
             "reading_score": data["reading score"],
@@ -160,95 +173,82 @@ def predict(student: StudentInput):
         traceback.print_exc()
         return {"error": str(e)}
 
-# =========================
-# CHAT WITH AI TUTOR
-# =========================
+# ---------------------------------------------------------
+# GEMINI CHAT
+# ---------------------------------------------------------
+
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(req: ChatRequest):
-    if not GEMINI_ENABLED:
-        return {"reply": "AI tutor is currently unavailable."}
-
-    prompt = (
-        f"You are a friendly tutor for a {req.grade_level}th grade student.\n"
-        f"Use simple language and emojis.\n"
-        f"Question: {req.message}"
-    )
-
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
-        return {"reply": response.text}
-    except Exception as e:
-        return {"reply": "Tutor is busy right now."}
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+        prompt = (
+            f"Act as a friendly tutor for a {req.grade_level}th grade student. "
+            f"Explain simply with emojis.\nQuestion: {req.message}"
+        )
+        res = model.generate_content(prompt)
+        return {"reply": res.text}
 
-# =========================
-# GENERATE FULL TEST
-# =========================
+    except Exception as e:
+        return {"reply": "Tutor is unavailable right now."}
+
+# ---------------------------------------------------------
+# TEST GENERATION
+# ---------------------------------------------------------
+
 @app.post("/generate_full_test")
 async def generate_full_test(req: TestRequest):
-    if not GEMINI_ENABLED:
-        return {"questions": []}
-
-    count = 10 if req.test_type == "Assignment" else 15
-
-    context = f"\nFocus area: {req.learning_context}" if req.learning_context else ""
-
-    prompt = f"""
-    Create a {count}-question MCQ test for a 6th grade student.
-    Subject: {req.test_type}
-    Difficulty: {req.difficulty}
-    {context}
-
-    Respond ONLY in JSON:
-    {{
-      "questions": [
-        {{
-          "id": 1,
-          "question": "text",
-          "options": ["A", "B", "C", "D"],
-          "correct_answer": "A"
-        }}
-      ]
-    }}
-    """
-
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
-        text = response.text.replace("```json", "").replace("```", "").strip()
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+
+        prompt = f"""
+Create a {req.difficulty} level test for a 6th grader.
+Subject: {req.test_type}
+Context: {req.learning_context or "General"}
+
+Return ONLY valid JSON:
+{{
+  "questions": [
+    {{
+      "id": 1,
+      "question": "Question text",
+      "options": ["A", "B", "C", "D"],
+      "correct_answer": "A"
+    }}
+  ]
+}}
+"""
+
+        res = model.generate_content(prompt)
+        text = res.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
+
     except Exception:
+        traceback.print_exc()
         return {"questions": []}
 
-# =========================
-# ANALYZE TEST RESULT
-# =========================
+# ---------------------------------------------------------
+# TEST ANALYSIS
+# ---------------------------------------------------------
+
 @app.post("/analyze_test_results")
 async def analyze_test_results(res: TestResult):
-    if not GEMINI_ENABLED:
-        return {
-            "feedback": "Good effort!",
-            "recommendation": "Keep practicing."
-        }
-
-    prompt = f"""
-    Student scored {res.score}/{res.total_marks}.
-    Weak topics: {", ".join(res.wrong_answers[:5])}
-
-    Respond in JSON:
-    {{
-      "feedback": "...",
-      "recommendation": "..."
-    }}
-    """
-
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
-        text = response.text.replace("```json", "").replace("```", "").strip()
+        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+
+        prompt = f"""
+Student scored {res.score}/{res.total_marks}.
+Weak areas: {", ".join(res.wrong_answers[:5])}
+
+Respond in JSON:
+{{"feedback":"...","recommendation":"..."}}
+"""
+
+        out = model.generate_content(prompt)
+        text = out.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
+
     except Exception:
         return {
-            "feedback": "Nice try!",
-            "recommendation": "Revise weak areas."
+            "feedback": "Good effort!",
+            "recommendation": "Practice weak topics."
         }
