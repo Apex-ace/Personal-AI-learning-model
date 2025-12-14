@@ -1,15 +1,28 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from contextlib import asynccontextmanager
-from typing import Dict, Optional, List
-import pickle
-import pandas as pd
-import numpy as np
+import os
+
+import json
+
 import traceback
-import json 
-# CRITICAL FIX: Corrected the import path that caused the ImportError
-from google_generativeai import genai 
+
+import google.generativeai as genai
+
+from fastapi import FastAPI, HTTPException
+
+from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel, Field, ConfigDict
+
+from contextlib import asynccontextmanager
+
+from typing import Dict, List, Optional
+
+import pickle
+
+import pandas as pd
+
+import numpy as np
+
+from dotenv import load_dotenv
 
 # ----------------------------------------------------------------------
 # DYNAMIC MODEL SELECTION STRATEGY
