@@ -2,94 +2,90 @@ import os
 import json
 import traceback
 import google.generativeai as genai
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from contextlib import asynccontextmanager
-from typing import Dict, List, Optional
+from typing import List, Optional
 import pickle
 import pandas as pd
-import numpy as np
 from dotenv import load_dotenv
 
 # --- 1. Global Setup ---
-load_dotenv() 
+load_dotenv()
 GENAI_API_KEY = os.getenv("GEMINI_API_KEY")
-ACTIVE_MODEL_NAME = "gemini-pro" # Default
+ACTIVE_MODEL_NAME = "gemini-pro"
 
-if not GENAI_API_KEY:
-    print("⚠️ WARNING: GEMINI_API_KEY not found in .env file.")
+if GENAI_API_KEY:
+    genai.configure(api_key=GENAI_API_KEY)
+    print("✅ Gemini API Key Loaded.")
 else:
-    try:
-        genai.configure(api_key=GENAI_API_KEY)
-        print("✅ Gemini API Key Loaded.")
-    except Exception as e:
-        print(f"❌ Error configuring Gemini: {e}")
+    print("⚠️ WARNING: GEMINI_API_KEY not found.")
 
 # --- SMART MODEL SELECTOR ---
 def configure_best_model():
     global ACTIVE_MODEL_NAME
-    print("🔍 Searching for available Gemini models...")
     try:
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        preferred_order = ["models/gemini-1.5-flash", "models/gemini-pro", "models/gemini-1.0-pro"]
-        
-        for model in preferred_order:
-            if model in available_models:
-                ACTIVE_MODEL_NAME = model
-                print(f"✅ SUCCESS: Using model '{ACTIVE_MODEL_NAME}'")
+        models = [
+            m.name for m in genai.list_models()
+            if "generateContent" in m.supported_generation_methods
+        ]
+        for m in ["models/gemini-1.5-flash", "models/gemini-pro", "models/gemini-1.0-pro"]:
+            if m in models:
+                ACTIVE_MODEL_NAME = m
+                print(f"✅ Using Gemini Model: {ACTIVE_MODEL_NAME}")
                 return
-
-        if available_models:
-            ACTIVE_MODEL_NAME = available_models[0]
-            print(f"⚠️ Using fallback: '{ACTIVE_MODEL_NAME}'")
-        else:
-            print("❌ CRITICAL: No models found.")
     except Exception as e:
-        print(f"❌ Error listing models: {e}")
+        print("❌ Gemini model selection error:", e)
 
+# --- ML ARTIFACT STORAGE ---
 ml_artifacts = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if GENAI_API_KEY: configure_best_model()
+    if GENAI_API_KEY:
+        configure_best_model()
 
     try:
-        with open('student_performance_artifacts.pkl', 'rb') as f:
+        with open("student_performance_artifacts.pkl", "rb") as f:
             artifacts = pickle.load(f)
-        ml_artifacts['df_full'] = artifacts['df']
-        ml_artifacts['classification_model'] = artifacts['classification_model']
-        ml_artifacts['regression_model'] = artifacts['regression_model']
-        ml_artifacts['imputer'] = artifacts['imputer']
-        ml_artifacts['numeric_features'] = artifacts['numeric_features']
-        ml_artifacts['categorical_features'] = artifacts['categorical_features']
-        
-        # Re-create columns
-        df_full = ml_artifacts['df_full']
-        cat_features = ml_artifacts['categorical_features']
-        num_features = ml_artifacts['numeric_features']
-        df_encoded = pd.get_dummies(df_full[cat_features], drop_first=True)
-        X_full = pd.concat([df_full[num_features].reset_index(drop=True), df_encoded.reset_index(drop=True)], axis=1)
-        ml_artifacts['X_full_columns'] = X_full.columns
+
+        ml_artifacts["df_full"] = artifacts["df"]
+        ml_artifacts["classification_model"] = artifacts["classification_model"]
+        ml_artifacts["regression_model"] = artifacts["regression_model"]
+        ml_artifacts["imputer"] = artifacts["imputer"]
+        ml_artifacts["numeric_features"] = artifacts["numeric_features"]
+        ml_artifacts["categorical_features"] = artifacts["categorical_features"]
+
+        df = ml_artifacts["df_full"]
+        df_cat = pd.get_dummies(df[ml_artifacts["categorical_features"]], drop_first=True)
+        X = pd.concat([df[ml_artifacts["numeric_features"]], df_cat], axis=1)
+        ml_artifacts["X_full_columns"] = X.columns
+
         print("✅ ML Artifacts loaded successfully.")
+
     except Exception as e:
-        print(f"❌ Error loading ML artifacts: {e}")
-        ml_artifacts['error'] = True
+        print("❌ ML Artifact Load Error:", e)
+        ml_artifacts["error"] = True
+
     yield
     ml_artifacts.clear()
 
+# --- FASTAPI APP ---
 app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 2. Data Models ---
+# --- DATA MODELS ---
 class StudentInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
+
     math_score: float = Field(..., alias="math score")
     reading_score: float = Field(..., alias="reading score")
     writing_score: float = Field(..., alias="writing score")
@@ -105,135 +101,142 @@ class ChatRequest(BaseModel):
 
 class TestRequest(BaseModel):
     difficulty: str
-    test_type: str # "Math", "Reading", "Internal 1", "Assignment"
-    learning_context: Optional[str] = None # NEW: Context from ML prediction
+    test_type: str
+    learning_context: Optional[str] = None
 
 class TestResult(BaseModel):
     score: int
     total_marks: int
     wrong_answers: List[str]
 
-class QuizSubmission(BaseModel):
-    question: str
-    student_answer: str
-    correct_answer: str
-
-# --- 3. Endpoints ---
-
+# --- PREDICT (REAL ML, FRONTEND SAFE) ---
 @app.post("/predict")
 def predict(student_data: StudentInput):
-    if ml_artifacts.get('error'): return {"final_marks_prediction": 0, "risk_level": "Error", "math_score": 0, "reading_score": 0, "writing_score": 0}
+
+    if ml_artifacts.get("error"):
+        return {
+            "final_marks_prediction": 0,
+            "final_pass_probability": 0,
+            "risk_level": "Error",
+            "math_score": 0,
+            "reading_score": 0,
+            "writing_score": 0
+        }
+
     try:
         data = student_data.model_dump(by_alias=True)
-        
-        # --- SIMPLE PREDICTION LOGIC ---
-        avg_score = (data['math score'] + data['reading score'] + data['writing score']) / 3
-        pred_marks = round(avg_score * 0.9 + (data['Daily Study Hours'] * 2), 2)
-        if pred_marks > 100: pred_marks = 100.0
-        
-        pass_prob = 0.95 if pred_marks > 40 else 0.45
-        risk_level = "High" if pass_prob < 0.6 else "Low"
-        
-        if risk_level == "Low" and pred_marks < 60 and pred_marks >= 40:
-             risk_level = "Medium" 
-        
-        subject_scores = {
-            "math_score": data['math score'],
-            "reading_score": data['reading score'],
-            "writing_score": data['writing score'],
-        }
+        df = pd.DataFrame([data])
+
+        num = ml_artifacts["numeric_features"]
+        cat = ml_artifacts["categorical_features"]
+        imputer = ml_artifacts["imputer"]
+
+        df[num] = imputer.transform(df[num])
+        df_cat = pd.get_dummies(df[cat], drop_first=True)
+
+        X = pd.concat([df[num], df_cat], axis=1)
+        X = X.reindex(columns=ml_artifacts["X_full_columns"], fill_value=0)
+
+        reg_model = ml_artifacts["regression_model"]
+        clf_model = ml_artifacts["classification_model"]
+
+        predicted_marks = float(reg_model.predict(X)[0])
+        pass_prob = float(clf_model.predict_proba(X)[0][1])
+
+        if pass_prob < 0.4:
+            risk = "High"
+        elif pass_prob < 0.7:
+            risk = "Medium"
+        else:
+            risk = "Low"
 
         return {
-            "final_marks_prediction": pred_marks, 
-            "final_pass_probability": pass_prob, 
-            "risk_level": risk_level,
-            **subject_scores
+            "final_marks_prediction": round(predicted_marks, 2),
+            "final_pass_probability": round(pass_prob, 2),
+            "risk_level": risk,
+            "math_score": data["math score"],
+            "reading_score": data["reading score"],
+            "writing_score": data["writing score"]
         }
-    except Exception:
-        return {"final_marks_prediction": 0, "risk_level": "Unknown", "math_score": 0, "reading_score": 0, "writing_score": 0}
 
+    except Exception:
+        traceback.print_exc()
+        return {
+            "final_marks_prediction": 0,
+            "final_pass_probability": 0,
+            "risk_level": "Unknown",
+            "math_score": 0,
+            "reading_score": 0,
+            "writing_score": 0
+        }
+
+# --- CHAT WITH TUTOR ---
 @app.post("/chat_with_tutor")
 async def chat_with_tutor(request: ChatRequest):
     prompt = f"Act as a funny tutor for a {request.grade_level}th grader. Use emojis 🌟. Keep it short. Question: {request.message}"
-    try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
-        response = model.generate_content(prompt)
-        return {"reply": response.text}
-    except Exception as e:
-        return {"reply": f"Error: {str(e)}"}
+    model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+    response = model.generate_content(prompt)
+    return {"reply": response.text}
 
+# --- GENERATE TEST ---
 @app.post("/generate_full_test")
 async def generate_full_test(req: TestRequest):
-    print(f"📝 Generating {req.difficulty} test for: {req.test_type}")
-    print(f"🧠 Context: {req.learning_context}")
-    
-    # Logic for Marks & Questions count
-    if req.test_type == "Assignment":
-        count = 10 
-        subject_prompt = "Mix of critical thinking and problem solving."
-    elif "Internal" in req.test_type:
-        count = 20 
-        subject_prompt = "Mixed subjects: Math (8 questions), Reading (6 questions), Writing (6 questions)."
-    else:
-        count = 15 # Standard Subject Test
-        subject_prompt = f"Strictly 100% {req.test_type} questions."
 
-    # ENHANCED PROMPT LOGIC
-    difficulty_instructions = ""
-    if req.difficulty == "Easy":
-        difficulty_instructions = "Focus on foundational concepts, definitions, and simple examples. Avoid complex logic."
-    elif req.difficulty == "Hard" or req.difficulty == "Very Hard":
-        difficulty_instructions = "Include word problems, multi-step logic, and application-based questions. Challenge the student."
-    
-    context_instruction = ""
-    if req.learning_context:
-        context_instruction = f"ADAPTIVE INSTRUCTION: {req.learning_context}. Ensure questions specifically address this need."
+    if req.test_type == "Assignment":
+        count = 10
+    elif "Internal" in req.test_type:
+        count = 20
+    else:
+        count = 15
+
+    context = f"ADAPTIVE INSTRUCTION: {req.learning_context}" if req.learning_context else ""
 
     prompt = f"""
-    Create a {count}-question multiple-choice test for a 6th grader.
-    Subject: {req.test_type}
-    Difficulty Level: {req.difficulty}
-    
-    {difficulty_instructions}
-    {context_instruction}
-    
-    Respond ONLY in valid JSON format like this:
-    {{
-        "questions": [
-            {{
-                "id": 1,
-                "question": "Question text...",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "Option Text"
-            }}
-        ]
-    }}
-    """
-    try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
-        response = model.generate_content(prompt)
-        cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned_text)
-    except Exception as e:
-        traceback.print_exc()
-        return {"questions": []}
+Return ONLY valid JSON.
 
+Create a {count}-question MCQ test for a 6th grader.
+Subject: {req.test_type}
+Difficulty: {req.difficulty}
+
+{context}
+
+Format:
+{{
+ "questions": [
+  {{
+   "id": 1,
+   "question": "...",
+   "options": ["A","B","C","D"],
+   "correct_answer": "A"
+  }}
+ ]
+}}
+"""
+
+    model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+    response = model.generate_content(prompt)
+
+    text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(text)
+
+# --- ANALYZE RESULTS ---
 @app.post("/analyze_test_results")
 async def analyze_test_results(res: TestResult):
-    prompt = f"""
-    Student scored {res.score}/{res.total_marks}.
-    Weak areas: {', '.join(res.wrong_answers[:5])}.
-    Provide: 1. Short feedback. 2. Specific recommendation.
-    Respond in JSON: {{ "feedback": "...", "recommendation": "..." }}
-    """
-    try:
-        model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
-        response = model.generate_content(prompt)
-        cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned_text)
-    except Exception as e:
-        return {"feedback": "Good effort!", "recommendation": "Review your mistakes."}
 
+    prompt = f"""
+Student scored {res.score}/{res.total_marks}.
+Weak areas: {", ".join(res.wrong_answers[:5])}.
+Return JSON:
+{{ "feedback": "...", "recommendation": "..." }}
+"""
+
+    model = genai.GenerativeModel(ACTIVE_MODEL_NAME)
+    response = model.generate_content(prompt)
+
+    text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(text)
+
+# --- RUN (NO PORT SPECIFIED) ---
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app)
