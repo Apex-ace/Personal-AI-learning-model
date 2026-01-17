@@ -14,27 +14,27 @@ An intelligent, interactive educational platform designed to provide a holistic 
 * **Memory:** Retains conversation history for continuous learning.
 * **Kid-Friendly UI:** Playful interface to reduce study anxiety.
 
-### 📊 2. Performance Dashboard
+### 2. Performance Dashboard
 * **XP Growth Chart:** Interactive line charts utilizing `Chart.js`.
 * **Gamified Stats:** Track "Total Missions," "High Scores," and "Power Levels."
 * **Data Visualization:** Clear insights into academic trends.
 
-### 🔮 3. Smart Performance Prediction
+### 3. Smart Performance Prediction
 * **ML-Powered Analysis:** Uses **Scikit-Learn** (Regression) to predict future marks based on study habits and attendance.
 * **Risk Assessment:** Classifies students into High/Medium/Low risk.
 * **Pass Probability:** Calculates the statistical likelihood of passing.
 
-### 📝 4. Adaptive Test Corner
+### 4. Adaptive Test Corner
 * **Personalized Quizzes:** Dynamically generated based on predicted weak areas.
 * **Dynamic Difficulty:** Adjusts (Easy/Medium/Hard) based on student risk levels.
 * **Instant Feedback:** Immediate scoring and corrections.
 
-### 🦁 5. Gamified Profile
+### 5. Gamified Profile
 * **Animal Avatars:** Auto-generated avatars based on usernames.
 * **Trophy Shelf:** Earn badges (e.g., "Sprinter", "Gold Rush").
 * **Leveling System:** Gain XP by completing tests and talking to the AI.
 
-### 🔐 6. Secure Authentication
+### 6. Secure Authentication
 * **Supabase Auth:** Secure Email/Password login.
 * **Persistence:** Keeps sessions active securely.
 
@@ -63,7 +63,7 @@ An intelligent, interactive educational platform designed to provide a holistic 
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 student-ai-platform/
@@ -88,7 +88,7 @@ student-ai-platform/
 
 ```
 
-## ⚙️ Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
