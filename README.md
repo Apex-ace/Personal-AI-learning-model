@@ -40,7 +40,7 @@ An intelligent, interactive educational platform designed to provide a holistic 
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### Frontend
 * **Framework:** React.js
